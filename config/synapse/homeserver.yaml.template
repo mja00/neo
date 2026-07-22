@@ -73,8 +73,12 @@ url_preview_enabled: false
 
 report_stats: false
 suppress_key_server_warning: true
+# Multiple notaries so a big room's key-fetch burst (one lookup per resident
+# server) is split, instead of hammering matrix.org into rate-limiting us.
 trusted_key_servers:
   - server_name: "matrix.org"
+  - server_name: "element.io"
+  - server_name: "beeper.com"
 
 # A single transient federation 429 (matrix.org rate-limits aggressively) otherwise
 # blacks out a destination for the 10m default, breaking joins/hierarchy for minutes.
