@@ -163,11 +163,11 @@ if [[ "$MAS_ON" == true ]]; then
   mas_dns="
    ${NEO_AUTH_HOST}    -> this host   (orange-cloud — MAS)"
   mas_npm="
-   ${NEO_AUTH_HOST}    -> neo-mas:8080"
+   ${NEO_AUTH_HOST}    -> 127.0.0.1:${NEO_PORT_MAS:-8802}"
   mas_route="
    ${BLD}MAS routing on ${NEO_MATRIX_HOST}${RST}: add an Advanced custom location, ordered
    BEFORE the catch-all, so login/logout/refresh go to MAS:
-       location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://neo-mas:8080; }"
+       location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://127.0.0.1:${NEO_PORT_MAS:-8802}; }"
 fi
 
 cat <<EOF
@@ -182,12 +182,14 @@ ${BLD}1. DNS records${RST} (Cloudflare):
    ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)${mas_dns}
    ${NEO_TURN_HOST:-turn.$NEO_SERVER_NAME}  -> ${PUBLIC_IP:-<PUBLIC_IP>}  (${BLD}grey-cloud / DNS-only${RST} — CF cannot proxy UDP)
 
-${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, over the '${PROXY_NET}' network):
-   ${NEO_MATRIX_HOST}  -> neo-synapse:8008    (proxy the whole /_matrix prefix; set client_max_body_size ${SYNAPSE_MAX_UPLOAD_SIZE})
+${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, Forward Hostname 127.0.0.1):
+   ${NEO_MATRIX_HOST}  -> 127.0.0.1:${NEO_PORT_SYNAPSE:-8801}    (proxy the whole /_matrix prefix; set client_max_body_size ${SYNAPSE_MAX_UPLOAD_SIZE})
 ${apex_npm}
-   ${NEO_ELEMENT_HOST} -> neo-element:80
-   ${NEO_ADMIN_HOST}   -> neo-synapse-admin:80
-   ${NEO_GRAFANA_HOST} -> neo-grafana:3000${mas_npm}${mas_route}
+   ${NEO_ELEMENT_HOST} -> 127.0.0.1:${NEO_PORT_ELEMENT:-8803}
+   ${NEO_ADMIN_HOST}   -> 127.0.0.1:${NEO_PORT_ADMIN:-8804}
+   ${NEO_GRAFANA_HOST} -> 127.0.0.1:${NEO_PORT_GRAFANA:-8805}${mas_npm}${mas_route}
+   (host-mode NPM forwards to loopback ports; if your NPM shares Neo's Docker
+    network instead, use the container names neo-synapse:8008, neo-mas:8080, etc.)
 
 ${BLD}3. Start the stack:${RST}
    docker compose up -d

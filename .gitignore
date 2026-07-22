@@ -16,3 +16,6 @@
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Wrangler local state / cache
+.wrangler/

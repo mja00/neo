@@ -87,9 +87,11 @@ services:
       - ./data/synapse:/data
       - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
       - ./config/synapse/log.config:/data/log.config:ro
-    # On neo-internal to reach Postgres, and on the proxy network both so NPM
-    # resolves it by name AND so federation has a route to the internet.
+    # neo-internal reaches Postgres; proxy gives federation a route to the internet.
     networks: [neo-internal, proxy]
+    # Published on loopback so a host-mode nginx proxy manager can forward here.
+    ports:
+      - "127.0.0.1:${NEO_PORT_SYNAPSE:-8801}:8008"
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,8 +125,10 @@ services:
     command: ["server", "--config", "/config/config.yaml"]
     volumes:
       - ./config/mas:/config:ro
-    # neo-internal to reach Postgres + Synapse; proxy so NPM resolves neo-mas:8080.
+    # neo-internal reaches Postgres + Synapse; proxy gives an egress route.
     networks: [neo-internal, proxy]
+    ports:
+      - "127.0.0.1:${NEO_PORT_MAS:-8802}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -143,6 +147,8 @@ services:
     volumes:
       - ./config/element/config.json:/app/config.json:ro
     networks: [proxy]
+    ports:
+      - "127.0.0.1:${NEO_PORT_ELEMENT:-8803}:80"
     deploy:
       resources:
         limits:
@@ -156,6 +162,8 @@ services:
     container_name: neo-synapse-admin
     profiles: [admin]
     networks: [proxy]
+    ports:
+      - "127.0.0.1:${NEO_PORT_ADMIN:-8804}:80"
     deploy:
       resources:
         limits:
@@ -217,6 +225,8 @@ services:
       - ./config/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     networks: [neo-internal, proxy]
+    ports:
+      - "127.0.0.1:${NEO_PORT_GRAFANA:-8805}:3000"
     depends_on: [prometheus]
     deploy:
       resources:

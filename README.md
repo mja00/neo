@@ -43,33 +43,44 @@ Secrets (`*_SECRET`, `*_PASSWORD`) are left blank; `bootstrap.sh` fills them.
 
 ## Components
 
-| Profile | Service | Proxied by NPM to |
+| Profile | Service | Loopback port (`NEO_PORT_*`) |
 | --- | --- | --- |
-| _core_ | Synapse | `neo-synapse:8008` |
-| _core_ | well-known delegation | `neo-wellknown:80` |
-| `element` | Element Web | `neo-element:80` |
-| `admin` | Synapse Admin (Ketesa) | `neo-synapse-admin:80` |
+| _core_ | Synapse | `127.0.0.1:8801` (→ 8008) |
+| _core_ | well-known delegation | `neo-wellknown:80` (or CF Worker) |
+| `mas` | Matrix Authentication Service | `127.0.0.1:8802` (→ 8080) |
+| `element` | Element Web | `127.0.0.1:8803` (→ 80) |
+| `admin` | Synapse Admin (Ketesa) | `127.0.0.1:8804` (→ 80) |
 | `coturn` | Coturn (VoIP) | _not proxied — host ports_ |
-| `monitoring` | Prometheus + Grafana | `neo-grafana:3000` |
+| `monitoring` | Prometheus + Grafana | `127.0.0.1:8805` (→ Grafana 3000) |
 
 Postgres runs on an internal-only network. Redis is intentionally absent — a
 single (monolithic) Synapse does not use it; it belongs with a future worker setup.
 
 ## nginx proxy manager setup
 
-Create these proxy hosts (Forward Scheme **http**, forwarding to the container
-name + port over the `NEO_PROXY_NETWORK`):
+How NPM reaches Neo depends on how NPM itself is networked:
 
-1. **`NEO_MATRIX_HOST` → `neo-synapse:8008`** — proxy the entire `/_matrix` prefix
-   (client **and** federation ride this). In the Advanced tab, raise
-   `client_max_body_size` to match `SYNAPSE_MAX_UPLOAD_SIZE`, and restore the real
-   client IP from Cloudflare (see below).
-2. **`NEO_SERVER_NAME` (apex) → `neo-wellknown:80`** — use a **custom location**
-   for `/.well-known/matrix/` only, so any existing site on the apex is untouched.
-   *If the apex is served elsewhere (a different NPM/host), you can't add a location
-   here — instead serve the two well-known files at the Cloudflare edge with the
-   Worker in [`cloudflare/`](cloudflare/) and set `NEO_WELLKNOWN_EXTERNAL=true`.*
-3. `NEO_ELEMENT_HOST`, `NEO_ADMIN_HOST`, `NEO_GRAFANA_HOST` → their containers.
+- **NPM in host-network mode** (its default when it publishes 80/443 directly, and
+  the most common setup): it can't resolve container names, so Neo publishes each
+  web service on `127.0.0.1:<port>` (the `NEO_PORT_*` values) and NPM forwards to
+  `127.0.0.1:<port>`. This is the default the setup assumes.
+- **NPM sharing Neo's Docker network:** forward to the container name + port
+  instead (e.g. `neo-synapse:8008`). The loopback ports are harmless in this case.
+
+Create these proxy hosts (Forward Scheme **http**, Forward Hostname `127.0.0.1`):
+
+1. **`NEO_MATRIX_HOST` → `127.0.0.1:${NEO_PORT_SYNAPSE}`** — proxy the entire
+   `/_matrix` prefix (client **and** federation ride this). In the Advanced tab,
+   raise `client_max_body_size` to match `SYNAPSE_MAX_UPLOAD_SIZE`, and restore the
+   real client IP from Cloudflare (see below).
+2. **`NEO_SERVER_NAME` (apex) → `127.0.0.1:80`** (the `neo-wellknown` container) —
+   use a **custom location** for `/.well-known/matrix/` only, so any existing site
+   on the apex is untouched. *If the apex is served elsewhere (a different NPM/host),
+   you can't add a location here — instead serve the two well-known files at the
+   Cloudflare edge with the Worker in [`cloudflare/`](cloudflare/) and set
+   `NEO_WELLKNOWN_EXTERNAL=true`.*
+3. `NEO_ELEMENT_HOST` → `127.0.0.1:${NEO_PORT_ELEMENT}`, `NEO_ADMIN_HOST` →
+   `127.0.0.1:${NEO_PORT_ADMIN}`, `NEO_GRAFANA_HOST` → `127.0.0.1:${NEO_PORT_GRAFANA}`.
 
 ### Real client IP
 
@@ -132,12 +143,12 @@ What Neo wires up for you (via `bootstrap.sh`):
   local registration/password auth are disabled (Synapse won't start otherwise).
 - The client well-known gains the `org.matrix.msc2965.authentication` block.
 
-You still wire two things in NPM (bootstrap prints them):
-- A proxy host `NEO_AUTH_HOST → neo-mas:8080`, plus its orange-cloud DNS record.
+You still wire two things in NPM (bootstrap prints them, with your actual port):
+- A proxy host `NEO_AUTH_HOST → 127.0.0.1:${NEO_PORT_MAS}`, plus its orange-cloud DNS record.
 - On the matrix host, an **Advanced custom location ordered before** the catch-all,
   sending `login`/`logout`/`refresh` to MAS:
   ```
-  location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://neo-mas:8080; }
+  location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://127.0.0.1:8802; }
   ```
 
 Note: mobile **Element X** and QR-code login require MAS; this is what enables them.
