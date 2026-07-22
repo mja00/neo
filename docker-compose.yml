@@ -79,6 +79,9 @@ services:
     <<: *restart
     image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
     container_name: neo-synapse
+    # tini as PID 1 reaps zombie subprocesses and forwards signals, so the
+    # container can always be stopped/recreated cleanly (start.py doesn't reap).
+    init: true
     # Run as the host user so the ./data/synapse bind mount stays writable.
     user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
     environment:
@@ -105,7 +108,9 @@ services:
       resources:
         limits:
           cpus: '4'
-          memory: 4G
+          # Generous headroom — big-room state resolution + federation can spike
+          # well past 4G; on a 32G box a low ceiling just causes OOM kills.
+          memory: 12G
 
   wellknown:
     <<: *restart

@@ -36,10 +36,11 @@ database:
     cp_min: 5
     cp_max: 10
 
-# Plenty of RAM headroom on a 32 GB box for a few users, so keep caches warm.
+# Keep caches warm but not greedy — 2.0 + big rooms inflated memory into the
+# container limit. 1.0 is still generous for a few users.
 caches:
-  global_factor: 2.0
-  event_cache_size: "20K"
+  global_factor: 1.0
+  event_cache_size: "10K"
   expiry_time: 30m
 
 # The auth block (built-in registration vs. delegated MAS) is appended here by
