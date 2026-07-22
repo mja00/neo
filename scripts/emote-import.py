@@ -132,6 +132,13 @@ def write_sticker_pack(packs_dir: Path, pack_id: str, title: str,
     (packs_dir / pack_file).write_text(
         json.dumps({"title": title, "id": pack_id, "stickers": stickers}))
 
+    # The picker fetches thumbnails from local files (not the authenticated media
+    # API), keyed by media id, so write the raw bytes there under web/packs/thumbnails.
+    thumbs = packs_dir / "thumbnails"
+    thumbs.mkdir(exist_ok=True)
+    for u in uploaded:
+        (thumbs / u["mxc"].rsplit("/", 1)[-1]).write_bytes(u["data"])
+
     index_path = packs_dir / "index.json"
     try:
         index = json.loads(index_path.read_text())
@@ -238,7 +245,7 @@ def main() -> None:
         )["content_uri"]
         new_images[code] = {"url": mxc, "usage": ["emoticon"],
                             "info": {"mimetype": ctype, "size": len(data)}}
-        uploaded.append({"code": code, "mxc": mxc, "size": len(data),
+        uploaded.append({"code": code, "mxc": mxc, "size": len(data), "data": data,
                          "ctype": ctype, "dims": image_dims(data, path.suffix.lower())})
         print(f"  :{code}: -> {mxc}")
 
