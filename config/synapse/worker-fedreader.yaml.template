@@ -1,0 +1,18 @@
+# Inbound federation reader — handles ^/_matrix/federation/* (incl. the /send/
+# firehose) off the main process. Loaded alongside homeserver.yaml. HTTP listener
+# is behind nginx proxy manager (x_forwarded); metrics for Prometheus.
+worker_app: synapse.app.generic_worker
+worker_name: neo-fedreader
+worker_log_config: /data/log.config
+
+worker_listeners:
+  - type: http
+    port: 8083
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [federation]
+        compress: false
+  - type: metrics
+    bind_addresses: ['0.0.0.0']
+    port: 9102

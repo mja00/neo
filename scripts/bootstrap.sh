@@ -116,7 +116,9 @@ fi
 if [[ "$WORKERS_ON" == true ]]; then
   envsubst "$ALLOW" < config/synapse/workers.yaml.template >> config/synapse/homeserver.yaml
   render_to config/synapse/worker-fedsender.yaml.template config/synapse/worker-fedsender.yaml
-  info "Workers: outbound federation sender enabled."
+  render_to config/synapse/worker-fedreader.yaml.template config/synapse/worker-fedreader.yaml
+  render_to config/synapse/worker-synchrotron.yaml.template config/synapse/worker-synchrotron.yaml
+  info "Workers: federation sender + reader + sync enabled."
 fi
 
 # TURN over TLS: append cert lines only when a cert path is configured.
@@ -183,6 +185,19 @@ if [[ "$MAS_ON" == true ]]; then
        location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://127.0.0.1:${NEO_PORT_MAS:-8802}; }"
 fi
 
+workers_route=""
+if [[ "$WORKERS_ON" == true ]]; then
+  workers_route="
+   ${BLD}Worker routing on ${NEO_MATRIX_HOST}${RST}: add these Advanced custom locations
+   (after the MAS rule if present — regex first-match wins, all beat the default forward):
+       location ~ ^/_matrix/client/(r0|v3)/sync\$                        { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
+       location ~ ^/_matrix/client/(api/v1|r0|v3)/(events|initialSync)\$ { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
+       location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(messages|context|members|state)\$ { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
+       location ~ ^/_matrix/client/(r0|v3|unstable)/keys/query\$         { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
+       location ~ ^/_matrix/federation/                                 { proxy_pass http://127.0.0.1:${NEO_PORT_FEDREADER:-8806}; }
+   Add proxy_set_header Host \$host / X-Forwarded-For / X-Forwarded-Proto \$scheme to each."
+fi
+
 cat <<EOF
 
 ${BLD}Bootstrap complete.${RST} Next steps:
@@ -200,7 +215,7 @@ ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, Forward Hostname 
 ${apex_npm}
    ${NEO_ELEMENT_HOST} -> 127.0.0.1:${NEO_PORT_ELEMENT:-8803}
    ${NEO_ADMIN_HOST}   -> 127.0.0.1:${NEO_PORT_ADMIN:-8804}
-   ${NEO_GRAFANA_HOST} -> 127.0.0.1:${NEO_PORT_GRAFANA:-8805}${mas_npm}${mas_route}
+   ${NEO_GRAFANA_HOST} -> 127.0.0.1:${NEO_PORT_GRAFANA:-8805}${mas_npm}${mas_route}${workers_route}
    (host-mode NPM forwards to loopback ports; if your NPM shares Neo's Docker
     network instead, use the container names neo-synapse:8008, neo-mas:8080, etc.)
 

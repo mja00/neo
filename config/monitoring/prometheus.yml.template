@@ -13,6 +13,16 @@ scrape_configs:
     static_configs:
       - targets: ['fedsender:9101']
 
+  - job_name: synapse-fedreader
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['fedreader:9102']
+
+  - job_name: synapse-synchrotron
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['synchrotron:9103']
+
   - job_name: node
     static_configs:
       - targets: ['node-exporter:9100']

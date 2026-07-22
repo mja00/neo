@@ -8,6 +8,8 @@
 /config/synapse/homeserver.yaml
 /config/synapse/log.config
 /config/synapse/worker-fedsender.yaml
+/config/synapse/worker-fedreader.yaml
+/config/synapse/worker-synchrotron.yaml
 /config/coturn/turnserver.conf
 /config/monitoring/prometheus.yml
 /config/wellknown/*.json

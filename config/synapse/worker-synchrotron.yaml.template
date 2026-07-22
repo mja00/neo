@@ -1,0 +1,18 @@
+# Client sync/read worker — handles /sync + heavy room reads off the main process
+# so client responsiveness is isolated from the federation flood. Loaded alongside
+# homeserver.yaml. HTTP listener is behind nginx proxy manager (x_forwarded).
+worker_app: synapse.app.generic_worker
+worker_name: neo-synchrotron
+worker_log_config: /data/log.config
+
+worker_listeners:
+  - type: http
+    port: 8084
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client]
+        compress: false
+  - type: metrics
+    bind_addresses: ['0.0.0.0']
+    port: 9103

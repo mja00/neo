@@ -217,12 +217,29 @@ internal replication listener on `9093`. **No reverse-proxy changes** — the se
 outbound-only. The federation DNS/egress load moves to the worker, which is why it
 carries the same pinned resolvers as the main process.
 
-This is Phase 1. If clients are still slow afterward, the next step is client-sync
-and federation-*inbound* workers — those need NPM custom-location routing and aren't
-built yet.
+The `workers` profile also starts two **Phase 2** workers — `neo-fedreader`
+(inbound federation, the `/_matrix/federation/*` firehose) and `neo-synchrotron`
+(client `/sync` + heavy room reads) — so a big, busy room's incoming events stop
+starving client sync. Unlike the sender, these serve HTTP and **require NPM routing**:
+add these ordered Advanced custom locations to the `matrix` proxy host (bootstrap
+prints them with your ports + the proxy headers):
+
+```nginx
+# after the MAS rule; regex first-match wins, all beat NPM's default forward
+location ~ ^/_matrix/client/(r0|v3)/sync$                        { proxy_pass http://127.0.0.1:8807; }  # synchrotron
+location ~ ^/_matrix/client/(api/v1|r0|v3)/(events|initialSync)$ { proxy_pass http://127.0.0.1:8807; }
+location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(messages|context|members|state)$ { proxy_pass http://127.0.0.1:8807; }
+location ~ ^/_matrix/client/(r0|v3|unstable)/keys/query$         { proxy_pass http://127.0.0.1:8807; }
+location ~ ^/_matrix/federation/                                 { proxy_pass http://127.0.0.1:8806; }  # fedreader
+```
+
+Client writes, `/_matrix/key/*`, and media intentionally stay on main. Without the
+routing the workers just idle — you must add it for them to take load. On this box's
+8 slow cores, this spreads main / sender / reader / sync across four processes.
 
 ## Deliberately deferred
 
-- **Client/inbound workers (Phase 2):** would further split sync + inbound federation
-  onto workers; needs reverse-proxy routing. Add if Phase 1 isn't enough.
+- **Events stream writer (Phase 3):** event *persistence* still runs on main. If a
+  busy room still pins main after Phase 2 (on persistence, not federation/sync), move
+  the `events` stream to a writer worker. Measure first.
 - **Bridges:** not included; the profile pattern makes them easy to add.

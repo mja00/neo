@@ -339,6 +339,70 @@ services:
         limits:
           memory: 4G
 
+  # Phase 2 workers — inbound federation + client sync (need NPM routing).
+  fedreader:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-fedreader
+    profiles: [workers]
+    init: true
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    command: ["run", "--config-path", "/data/homeserver.yaml", "--config-path", "/config/worker-fedreader.yaml"]
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+      - ./config/synapse/worker-fedreader.yaml:/config/worker-fedreader.yaml:ro
+    networks: [neo-internal, proxy]
+    # Inbound reader also fetches missing events/state outbound → egress + DNS.
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    ports:
+      - "127.0.0.1:${NEO_PORT_FEDREADER:-8806}:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  synchrotron:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-synchrotron
+    profiles: [workers]
+    init: true
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    command: ["run", "--config-path", "/data/homeserver.yaml", "--config-path", "/config/worker-synchrotron.yaml"]
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+      - ./config/synapse/worker-synchrotron.yaml:/config/worker-synchrotron.yaml:ro
+    networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    ports:
+      - "127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
 networks:
   neo-internal:
     internal: true
