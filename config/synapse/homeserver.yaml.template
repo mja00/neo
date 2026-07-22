@@ -43,6 +43,13 @@ caches:
   event_cache_size: "10K"
   expiry_time: 30m
 
+# Presence off: for a small server in large rooms, processing/broadcasting
+# online-status EDUs for thousands of remote users is a big federation-CPU cost
+# for little benefit. Use "untracked" instead to keep clients able to show
+# presence without the server-side tracking overhead.
+presence:
+  enabled: false
+
 # The auth block (built-in registration vs. delegated MAS) is appended here by
 # scripts/bootstrap.sh from config/synapse/auth.{local,mas}.yaml.template,
 # depending on whether `mas` is in COMPOSE_PROFILES.
