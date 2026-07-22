@@ -53,6 +53,7 @@ Secrets (`*_SECRET`, `*_PASSWORD`) are left blank; `bootstrap.sh` fills them.
 | `coturn` | Coturn (VoIP) | _not proxied — host ports_ |
 | `monitoring` | Prometheus + Grafana + node-exporter + cAdvisor | `127.0.0.1:8805` (→ Grafana 3000) |
 | `workers` | Redis + federation sender/reader, synchrotron, events writer, client reader | fedreader `8806`, synchrotron `8807`, client reader `8808` (sender + writer: internal only) |
+| `stickers` | maunium sticker picker (static widget) | `127.0.0.1:8809` (→ 80) |
 
 Postgres runs on an internal-only network. Redis is only started with the
 `workers` profile (it's the replication bus for worker mode); a monolithic Synapse
@@ -259,6 +260,30 @@ that off:
 
 On this box's slow cores, the full profile spreads work across six processes: main /
 sender / reader / sync / events writer / client reader.
+
+## Stickers and custom emotes
+
+The **`stickers`** profile serves the [maunium sticker picker](https://github.com/maunium/stickerpicker)
+— a static widget Element loads for sending stickers. `bootstrap.sh` clones it into
+`./data/stickerpicker` (pinned by `STICKERPICKER_GIT_REF`) and the container serves
+`web/`; add the `NEO_STICKERS_HOST` proxy host bootstrap prints, then in Element open
+a room → sticker icon → set the picker URL to `https://<NEO_STICKERS_HOST>/`.
+
+To turn a set of images (e.g. exported Discord emotes) into **inline emoji** — the
+`:shortcode:` kind that render in the timeline — use the helper, which uploads them to
+the media repo and installs an [MSC2545](https://github.com/matrix-org/matrix-spec-proposals/pull/2545)
+image pack. Each file's name becomes its shortcode:
+
+```bash
+# personal pack (account data) — available to you in every room
+MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --pack-name discord ./my-emotes
+# or a shared room pack (needs permission to set room state)
+MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --room '!id:server' ./my-emotes
+```
+
+Get the token from Element → Settings → Help & About → Advanced → Access Token. Repeat
+runs merge into your personal pack. Stickers (as opposed to inline emoji) are created
+with maunium's own `sticker-pack` tool, which the clone brings along.
 
 ## Deliberately deferred
 

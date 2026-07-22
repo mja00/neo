@@ -48,6 +48,10 @@ fi
 WORKERS_ON=false
 case ",${COMPOSE_PROFILES:-}," in *,workers,*) WORKERS_ON=true ;; esac
 
+# Stickers profile: serve the maunium sticker picker (cloned from git below).
+STICKERS_ON=false
+case ",${COMPOSE_PROFILES:-}," in *,stickers,*) STICKERS_ON=true ;; esac
+
 warn "NEO_SERVER_NAME is '${NEO_SERVER_NAME}'. This is permanent — it can never be changed once a user or room exists."
 
 # --- 3. Verify the external proxy network exists (NPM owns it) ----------------
@@ -121,6 +125,21 @@ if [[ "$WORKERS_ON" == true ]]; then
   render_to config/synapse/worker-eventwriter.yaml.template config/synapse/worker-eventwriter.yaml
   render_to config/synapse/worker-clientreader.yaml.template config/synapse/worker-clientreader.yaml
   info "Workers: federation sender + reader + sync + eventwriter + clientreader enabled."
+fi
+
+# Stickers: clone (or update) the maunium sticker picker into ./data so the
+# stickerpicker container can serve web/. Pinned to STICKERPICKER_GIT_REF.
+if [[ "$STICKERS_ON" == true ]]; then
+  command -v git >/dev/null || die "git is required for the stickers profile."
+  ref="${STICKERPICKER_GIT_REF:-master}"
+  if [[ ! -d data/stickerpicker/.git ]]; then
+    info "Cloning maunium/stickerpicker..."
+    git clone https://github.com/maunium/stickerpicker data/stickerpicker
+  fi
+  git -C data/stickerpicker fetch --tags --quiet origin
+  git -C data/stickerpicker checkout --quiet "$ref"
+  mkdir -p data/stickerpicker/web/packs
+  info "stickerpicker checked out at ${ref}."
 fi
 
 # TURN over TLS: append cert lines only when a cert path is configured.
@@ -207,6 +226,19 @@ if [[ "$WORKERS_ON" == true ]]; then
    Add proxy_set_header Host \$host / X-Forwarded-For / X-Forwarded-Proto \$scheme to each."
 fi
 
+stickers_dns=""; stickers_npm=""; stickers_note=""
+if [[ "$STICKERS_ON" == true ]]; then
+  stickers_dns="
+   ${NEO_STICKERS_HOST}   -> this host   (orange-cloud)"
+  stickers_npm="
+   ${NEO_STICKERS_HOST} -> 127.0.0.1:${NEO_PORT_STICKERS:-8809}"
+  stickers_note="
+   ${BLD}Stickers on ${NEO_STICKERS_HOST}${RST}: in Element, open a room, click the sticker
+   icon in the composer, then set the picker URL to https://${NEO_STICKERS_HOST}/
+   Convert Discord emotes to inline emoji (drop the images in a folder first):
+       MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --pack-name discord ./my-emotes"
+fi
+
 cat <<EOF
 
 ${BLD}Bootstrap complete.${RST} Next steps:
@@ -216,7 +248,7 @@ ${BLD}1. DNS records${RST} (Cloudflare):
    ${apex_dns}
    ${NEO_ELEMENT_HOST}    -> this host   (orange-cloud)
    ${NEO_ADMIN_HOST}      -> this host   (orange-cloud)
-   ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)${mas_dns}
+   ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)${mas_dns}${stickers_dns}
    ${NEO_TURN_HOST:-turn.$NEO_SERVER_NAME}  -> ${PUBLIC_IP:-<PUBLIC_IP>}  (${BLD}grey-cloud / DNS-only${RST} — CF cannot proxy UDP)
 
 ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, Forward Hostname 127.0.0.1):
@@ -224,7 +256,7 @@ ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, Forward Hostname 
 ${apex_npm}
    ${NEO_ELEMENT_HOST} -> 127.0.0.1:${NEO_PORT_ELEMENT:-8803}
    ${NEO_ADMIN_HOST}   -> 127.0.0.1:${NEO_PORT_ADMIN:-8804}
-   ${NEO_GRAFANA_HOST} -> 127.0.0.1:${NEO_PORT_GRAFANA:-8805}${mas_npm}${mas_route}${workers_route}
+   ${NEO_GRAFANA_HOST} -> 127.0.0.1:${NEO_PORT_GRAFANA:-8805}${mas_npm}${stickers_npm}${mas_route}${workers_route}${stickers_note}
    (host-mode NPM forwards to loopback ports; if your NPM shares Neo's Docker
     network instead, use the container names neo-synapse:8008, neo-mas:8080, etc.)
 
