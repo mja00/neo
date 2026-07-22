@@ -8,5 +8,8 @@
   "brand": "Neo",
   "disable_guests": true,
   "disable_custom_urls": false,
-  "default_theme": "dark"
+  "default_theme": "dark",
+  "features": {
+    "feature_custom_themes": true
+  }
 }
