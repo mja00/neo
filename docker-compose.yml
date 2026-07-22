@@ -89,6 +89,12 @@ services:
       - ./config/synapse/log.config:/data/log.config:ro
     # neo-internal reaches Postgres; proxy gives federation a route to the internet.
     networks: [neo-internal, proxy]
+    # Forward external lookups to reliable resolvers so federation DNS bursts
+    # (joining big rooms => thousands of lookups) don't get dropped by the host's
+    # systemd-resolved stub. Internal names still resolve via Docker's 127.0.0.11.
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
     # Published on loopback so a host-mode nginx proxy manager can forward here.
     ports:
       - "127.0.0.1:${NEO_PORT_SYNAPSE:-8801}:8008"
@@ -127,6 +133,9 @@ services:
       - ./config/mas:/config:ro
     # neo-internal reaches Postgres + Synapse; proxy gives an egress route.
     networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
     ports:
       - "127.0.0.1:${NEO_PORT_MAS:-8802}:8080"
     depends_on:
