@@ -162,8 +162,9 @@ services:
     container_name: neo-synapse-admin
     profiles: [admin]
     networks: [proxy]
+    # Ketesa (static-web-server) listens on 8080 despite the image's EXPOSE 80.
     ports:
-      - "127.0.0.1:${NEO_PORT_ADMIN:-8804}:80"
+      - "127.0.0.1:${NEO_PORT_ADMIN:-8804}:8080"
     deploy:
       resources:
         limits:
