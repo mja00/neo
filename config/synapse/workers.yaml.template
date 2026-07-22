@@ -1,0 +1,17 @@
+# Worker mode — appended to homeserver.yaml by bootstrap.sh only when `workers`
+# is in COMPOSE_PROFILES (so the main process never enables Redis without the
+# redis container running). Offloads outbound federation to the neo-fedsender
+# worker. Setting federation_sender_instances alone makes the main process stop
+# sending (send_federation is derived from this list — do NOT also set it).
+redis:
+  enabled: true
+  host: redis
+
+federation_sender_instances:
+  - neo-fedsender
+
+# Where workers reach the main process's replication listener (below in listeners).
+instance_map:
+  main:
+    host: synapse
+    port: 9093

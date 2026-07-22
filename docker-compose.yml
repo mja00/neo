@@ -289,6 +289,56 @@ services:
         limits:
           memory: 256M
 
+  # --- workers profile (scale-out; Phase 1 = outbound federation sender) -------
+
+  redis:
+    <<: *restart
+    image: redis:${REDIS_IMAGE_TAG}
+    container_name: neo-redis
+    profiles: [workers]
+    # Replication bus between Synapse processes — no persistence needed.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [neo-internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  fedsender:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-fedsender
+    profiles: [workers]
+    init: true
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    command: ["run", "--config-path", "/data/homeserver.yaml", "--config-path", "/config/worker-fedsender.yaml"]
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+      - ./config/synapse/worker-fedsender.yaml:/config/worker-fedsender.yaml:ro
+    # proxy + pinned DNS: outbound federation (and its DNS load) runs here now.
+    networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
 networks:
   neo-internal:
     internal: true

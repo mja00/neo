@@ -26,6 +26,14 @@ listeners:
     type: metrics
     bind_addresses: ['0.0.0.0']
 
+  # Replication endpoint for worker processes (workers profile). Internal only,
+  # never published; harmless when no workers connect.
+  - port: 9093
+    type: http
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [replication]
+
 database:
   name: psycopg2
   args:
@@ -41,7 +49,8 @@ database:
 caches:
   global_factor: 1.0
   event_cache_size: "10K"
-  expiry_time: 30m
+  expire_caches: true
+  cache_entry_ttl: 30m
 
 # Presence off: for a small server in large rooms, processing/broadcasting
 # online-status EDUs for thousands of remote users is a big federation-CPU cost

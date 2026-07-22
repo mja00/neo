@@ -1,0 +1,12 @@
+# federation_sender worker — loaded alongside homeserver.yaml. worker_name must
+# match the entry in federation_sender_instances (workers.yaml). Outbound only:
+# no client/federation listener, so nothing to route in the reverse proxy.
+worker_app: synapse.app.generic_worker
+worker_name: neo-fedsender
+worker_log_config: /data/log.config
+
+# Metrics only — Prometheus scrapes this (never published to the host).
+worker_listeners:
+  - type: metrics
+    bind_addresses: ['0.0.0.0']
+    port: 9101

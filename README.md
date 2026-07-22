@@ -52,9 +52,11 @@ Secrets (`*_SECRET`, `*_PASSWORD`) are left blank; `bootstrap.sh` fills them.
 | `admin` | Synapse Admin (Ketesa) | `127.0.0.1:8804` (→ 80) |
 | `coturn` | Coturn (VoIP) | _not proxied — host ports_ |
 | `monitoring` | Prometheus + Grafana + node-exporter + cAdvisor | `127.0.0.1:8805` (→ Grafana 3000) |
+| `workers` | Redis + federation-sender worker | _internal only — no proxy_ |
 
-Postgres runs on an internal-only network. Redis is intentionally absent — a
-single (monolithic) Synapse does not use it; it belongs with a future worker setup.
+Postgres runs on an internal-only network. Redis is only started with the
+`workers` profile (it's the replication bus for worker mode); a monolithic Synapse
+doesn't use it.
 
 ## nginx proxy manager setup
 
@@ -185,18 +187,42 @@ NVMe RAID** — running a private instance for a few users:
 - **Postgres** (in `docker-compose.yml` `command`): `shared_buffers=2GB`,
   `effective_cache_size=8GB`, NVMe cost/concurrency (`random_page_cost=1.1`,
   `effective_io_concurrency=200`), and parallelism matched to 8 cores.
-- **Synapse** (`caches` in `homeserver.yaml`): `global_factor: 2.0`, larger event
-  cache — there's ample RAM, so keep caches warm.
-- **Resource limits** per service (`deploy.resources.limits`) so nothing can
-  balloon: Synapse/Postgres 4 GB each, Prometheus 1 GB, Grafana 512 MB, the rest
-  ≤256 MB. Generous for this load — they're guard rails, not a squeeze.
+- **Synapse** (`caches` in `homeserver.yaml`): `global_factor: 1.0`, and
+  **presence disabled** — in large rooms presence EDUs are a big federation-CPU
+  cost for little benefit. Set presence to `"untracked"`/`true` if you want it back.
+- **Resource limits** per service (`deploy.resources.limits`): Synapse **12 GB**
+  (big-room state resolution spikes hard — a low ceiling causes OOM kills),
+  Postgres 4 GB, Prometheus 1 GB, Grafana 512 MB, the rest ≤256 MB. Guard rails, not
+  a squeeze.
+- **`init: true`** on Synapse (and the worker) so a zombie subprocess can't wedge
+  the container.
 - **Prometheus** retains 30 days (cheap on 450 GB NVMe).
 
 Moving to a smaller/larger box? Scale `shared_buffers`/`effective_cache_size` with
-RAM and revisit the limits. For many more users, enable Synapse workers (the
-deferred profile) — not worth the complexity at this scale.
+RAM and revisit the limits.
+
+## Scaling with workers
+
+Monolithic Synapse is single-threaded, so being in large federated rooms can pin one
+core and make clients sluggish. Enabling the **`workers`** profile offloads outbound
+federation to a separate `neo-fedsender` process (adds Redis as the replication bus):
+
+```
+COMPOSE_PROFILES=...,workers   # then ./scripts/bootstrap.sh && docker compose up -d
+```
+
+`bootstrap.sh` appends the redis + `federation_sender_instances` + `instance_map`
+block to `homeserver.yaml` and renders the worker config; the main process gets an
+internal replication listener on `9093`. **No reverse-proxy changes** — the sender is
+outbound-only. The federation DNS/egress load moves to the worker, which is why it
+carries the same pinned resolvers as the main process.
+
+This is Phase 1. If clients are still slow afterward, the next step is client-sync
+and federation-*inbound* workers — those need NPM custom-location routing and aren't
+built yet.
 
 ## Deliberately deferred
 
-- **Workers / scaling:** ships monolithic; workers (and Redis) are a future profile.
+- **Client/inbound workers (Phase 2):** would further split sync + inbound federation
+  onto workers; needs reverse-proxy routing. Add if Phase 1 isn't enough.
 - **Bridges:** not included; the profile pattern makes them easy to add.

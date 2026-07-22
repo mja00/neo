@@ -44,6 +44,10 @@ if [[ "$MAS_ON" == true ]]; then
     || die "python3 PyYAML is required to configure MAS (e.g. 'pip install pyyaml')."
 fi
 
+# Workers profile: offload outbound federation to the neo-fedsender worker.
+WORKERS_ON=false
+case ",${COMPOSE_PROFILES:-}," in *,workers,*) WORKERS_ON=true ;; esac
+
 warn "NEO_SERVER_NAME is '${NEO_SERVER_NAME}'. This is permanent — it can never be changed once a user or room exists."
 
 # --- 3. Verify the external proxy network exists (NPM owns it) ----------------
@@ -104,6 +108,15 @@ else
   envsubst "$ALLOW" < config/synapse/auth.local.yaml.template >> config/synapse/homeserver.yaml
   render_to config/wellknown/client.json.template config/wellknown/client.json
   info "Auth mode: built-in Synapse."
+fi
+
+# Workers: append the redis/sender block to homeserver.yaml and render the worker
+# config. Only when the profile is on, so the main process never enables Redis
+# without the redis container present.
+if [[ "$WORKERS_ON" == true ]]; then
+  envsubst "$ALLOW" < config/synapse/workers.yaml.template >> config/synapse/homeserver.yaml
+  render_to config/synapse/worker-fedsender.yaml.template config/synapse/worker-fedsender.yaml
+  info "Workers: outbound federation sender enabled."
 fi
 
 # TURN over TLS: append cert lines only when a cert path is configured.

@@ -7,6 +7,12 @@ scrape_configs:
     static_configs:
       - targets: ['synapse:9000']
 
+  # Only UP when the workers profile is enabled.
+  - job_name: synapse-fedsender
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['fedsender:9101']
+
   - job_name: node
     static_configs:
       - targets: ['node-exporter:9100']
