@@ -21,6 +21,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -59,16 +60,27 @@ def homeserver_from_env_file() -> str | None:
 
 def request(method: str, url: str, token: str, *, body: bytes | None = None,
             content_type: str | None = None) -> dict:
-    headers = {"Authorization": f"Bearer {token}"}
+    # A real UA avoids Cloudflare bot-fight (error 1010) blocking Python-urllib.
+    headers = {"Authorization": f"Bearer {token}",
+               "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) neo-emote-import/1.0"}
     if content_type:
         headers["Content-Type"] = content_type
-    req = urllib.request.Request(url, data=body, method=method, headers=headers)
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read() or b"{}")
-    except urllib.error.HTTPError as e:
-        detail = e.read().decode(errors="replace")
-        raise RuntimeError(f"{method} {url} -> {e.code}: {detail}") from e
+    # Retry on 429 so a bulk import isn't killed by Synapse's media rate limiter.
+    for attempt in range(6):
+        req = urllib.request.Request(url, data=body, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")
+            if e.code == 429 and attempt < 5:
+                try:
+                    wait = json.loads(detail).get("retry_after_ms", 1000) / 1000
+                except ValueError:
+                    wait = 1.0
+                time.sleep(min(wait + 0.1, 10))
+                continue
+            raise RuntimeError(f"{method} {url} -> {e.code}: {detail}") from e
 
 
 def shortcode(filename: str) -> str:
