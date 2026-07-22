@@ -51,7 +51,7 @@ Secrets (`*_SECRET`, `*_PASSWORD`) are left blank; `bootstrap.sh` fills them.
 | `element` | Element Web | `127.0.0.1:8803` (→ 80) |
 | `admin` | Synapse Admin (Ketesa) | `127.0.0.1:8804` (→ 80) |
 | `coturn` | Coturn (VoIP) | _not proxied — host ports_ |
-| `monitoring` | Prometheus + Grafana | `127.0.0.1:8805` (→ Grafana 3000) |
+| `monitoring` | Prometheus + Grafana + node-exporter + cAdvisor | `127.0.0.1:8805` (→ Grafana 3000) |
 
 Postgres runs on an internal-only network. Redis is intentionally absent — a
 single (monolithic) Synapse does not use it; it belongs with a future worker setup.
@@ -173,7 +173,9 @@ Three things are unrecoverable if lost — back them up off-host:
   [federationtester.matrix.org](https://federationtester.matrix.org/).
 - Uploads: send a file at the configured max through a client.
 - VoIP: force a relayed (TURN) call and confirm it connects.
-- Monitoring: Grafana → the provisioned **Synapse** dashboard; Prometheus target UP.
+- Monitoring: Grafana → the provisioned dashboards (**Synapse**, **Node Exporter
+  Full** for host metrics, **Cadvisor** for per-container usage); Prometheus →
+  Status → Targets shows `synapse`, `node`, `cadvisor` all UP.
 
 ## Performance tuning
 

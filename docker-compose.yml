@@ -234,6 +234,47 @@ services:
         limits:
           memory: 512M
 
+  node-exporter:
+    <<: *restart
+    image: prom/node-exporter:${NODE_EXPORTER_IMAGE_TAG}
+    container_name: neo-node-exporter
+    profiles: [monitoring]
+    # Reads host metrics via the mounts below (not the container's own view).
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks: [neo-internal]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  cadvisor:
+    <<: *restart
+    image: gcr.io/cadvisor/cadvisor:${CADVISOR_IMAGE_TAG}
+    container_name: neo-cadvisor
+    profiles: [monitoring]
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks: [neo-internal]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
 networks:
   neo-internal:
     internal: true
