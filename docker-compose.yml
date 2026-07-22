@@ -277,6 +277,13 @@ services:
     privileged: true
     devices:
       - /dev/kmsg
+    # Default 1s housekeeping over dozens of host containers pins ~0.6 cores; slow it
+    # right down and keep only the metric families the Grafana dashboard uses.
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=30s
+      - --max_housekeeping_interval=60s
+      - --disable_metrics=advtcp,cpu_topology,cpuset,disk,diskIO,hugetlb,memory_numa,oom_event,percpu,perf_event,process,referenced_memory,resctrl,sched,tcp,udp,cpuLoad
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro

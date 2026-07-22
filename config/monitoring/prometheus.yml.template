@@ -37,6 +37,8 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
+  # 30s matches cadvisor's housekeeping interval; a faster scrape just repeats samples.
   - job_name: cadvisor
+    scrape_interval: 30s
     static_configs:
       - targets: ['cadvisor:8080']
