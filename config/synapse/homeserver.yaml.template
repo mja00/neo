@@ -78,8 +78,9 @@ trusted_key_servers:
 
 # A single transient federation 429 (matrix.org rate-limits aggressively) otherwise
 # blacks out a destination for the 10m default, breaking joins/hierarchy for minutes.
-destination_min_retry_interval: 30s
-destination_max_retry_interval: 5m
+federation:
+  destination_min_retry_interval: 30s
+  destination_max_retry_interval: 5m
 
 enable_metrics: true
 
