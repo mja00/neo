@@ -1,0 +1,11 @@
+# Delegated auth via Matrix Authentication Service. Appended to homeserver.yaml by
+# bootstrap when `mas` is in COMPOSE_PROFILES. Synapse refuses to start if local
+# registration or password auth is left on alongside MAS, so both are disabled here.
+matrix_authentication_service:
+  enabled: true
+  endpoint: http://mas:8080/
+  secret: "${MAS_MATRIX_SECRET}"
+
+enable_registration: false
+password_config:
+  enabled: false

@@ -32,6 +32,18 @@ case ",${COMPOSE_PROFILES:-}," in
     || die "The coturn profile is enabled but PUBLIC_IP is empty — TURN relay needs it." ;;
 esac
 
+# Is Matrix Authentication Service enabled? It changes how the auth config renders.
+MAS_ON=false
+case ",${COMPOSE_PROFILES:-}," in *,mas,*) MAS_ON=true ;; esac
+if [[ "$MAS_ON" == true ]]; then
+  [[ -n "${NEO_AUTH_HOST:-}" && "$NEO_AUTH_HOST" != "auth.example.com" ]] \
+    || die "The mas profile is enabled but NEO_AUTH_HOST is unset — set it in .env."
+  command -v python3 >/dev/null \
+    || die "python3 is required to configure MAS."
+  python3 -c 'import yaml' 2>/dev/null \
+    || die "python3 PyYAML is required to configure MAS (e.g. 'pip install pyyaml')."
+fi
+
 warn "NEO_SERVER_NAME is '${NEO_SERVER_NAME}'. This is permanent — it can never be changed once a user or room exists."
 
 # --- 3. Verify the external proxy network exists (NPM owns it) ----------------
@@ -57,6 +69,7 @@ ensure_secret SYNAPSE_MACAROON_SECRET 32
 ensure_secret SYNAPSE_FORM_SECRET 32
 ensure_secret COTURN_STATIC_AUTH_SECRET 32
 ensure_secret GRAFANA_ADMIN_PASSWORD 16
+ensure_secret MAS_MATRIX_SECRET 32
 
 # Re-load so freshly generated secrets are available to envsubst below.
 set -a; # shellcheck disable=SC1091
@@ -65,20 +78,33 @@ source .env; set +a
 # --- 5. Render templates (explicit allowlist so literal $ in configs survives) -
 # Single quotes are intentional: envsubst must receive the literal variable names.
 # shellcheck disable=SC2016
-ALLOW='${NEO_SERVER_NAME} ${NEO_MATRIX_HOST} ${NEO_TURN_HOST} ${POSTGRES_PASSWORD} ${SYNAPSE_REGISTRATION_SHARED_SECRET} ${SYNAPSE_MACAROON_SECRET} ${SYNAPSE_FORM_SECRET} ${SYNAPSE_MAX_UPLOAD_SIZE} ${COTURN_STATIC_AUTH_SECRET} ${COTURN_MIN_PORT} ${COTURN_MAX_PORT} ${PUBLIC_IP}'
+ALLOW='${NEO_SERVER_NAME} ${NEO_MATRIX_HOST} ${NEO_TURN_HOST} ${NEO_AUTH_HOST} ${POSTGRES_PASSWORD} ${SYNAPSE_REGISTRATION_SHARED_SECRET} ${SYNAPSE_MACAROON_SECRET} ${SYNAPSE_FORM_SECRET} ${SYNAPSE_MAX_UPLOAD_SIZE} ${COTURN_STATIC_AUTH_SECRET} ${COTURN_MIN_PORT} ${COTURN_MAX_PORT} ${PUBLIC_IP} ${MAS_MATRIX_SECRET}'
 
 render() {
   local src="$1" dst="${1%.template}"
   envsubst "$ALLOW" < "$src" > "$dst"
   info "Rendered ${dst}."
 }
+render_to() { envsubst "$ALLOW" < "$1" > "$2"; info "Rendered $2."; }
+
 render config/synapse/homeserver.yaml.template
 render config/synapse/log.config.template
 render config/wellknown/server.json.template
-render config/wellknown/client.json.template
 render config/element/config.json.template
 render config/coturn/turnserver.conf.template
 render config/monitoring/prometheus.yml.template
+
+# Auth mode: append the matching fragment to homeserver.yaml (keeps YAML keys
+# unique) and render the matching client well-known.
+if [[ "$MAS_ON" == true ]]; then
+  envsubst "$ALLOW" < config/synapse/auth.mas.yaml.template >> config/synapse/homeserver.yaml
+  render_to config/wellknown/client.mas.json.template config/wellknown/client.json
+  info "Auth mode: MAS (delegated)."
+else
+  envsubst "$ALLOW" < config/synapse/auth.local.yaml.template >> config/synapse/homeserver.yaml
+  render_to config/wellknown/client.json.template config/wellknown/client.json
+  info "Auth mode: built-in Synapse."
+fi
 
 # TURN over TLS: append cert lines only when a cert path is configured.
 if [[ -n "${COTURN_TLS_CERT:-}" && -n "${COTURN_TLS_KEY:-}" ]]; then
@@ -105,7 +131,36 @@ else
   info "Signing key already exists — leaving it untouched."
 fi
 
+# --- 6b. MAS config: generate once, then patch our topology into it -----------
+if [[ "$MAS_ON" == true ]]; then
+  mkdir -p config/mas
+  if [[ ! -s config/mas/config.yaml ]]; then
+    info "Generating MAS config (secrets + keys)..."
+    # `config generate` writes the config to stdout; logs go to stderr.
+    docker run --rm "ghcr.io/element-hq/matrix-authentication-service:${MAS_IMAGE_TAG}" \
+      config generate > config/mas/config.yaml
+    info "Patching MAS config for this deployment..."
+    NEO_AUTH_HOST="$NEO_AUTH_HOST" NEO_SERVER_NAME="$NEO_SERVER_NAME" \
+      POSTGRES_PASSWORD="$POSTGRES_PASSWORD" MAS_MATRIX_SECRET="$MAS_MATRIX_SECRET" \
+      python3 scripts/patch-mas-config.py config/mas/config.yaml
+  else
+    info "MAS config already exists — leaving it untouched."
+  fi
+fi
+
 # --- 7. Print the DNS records and NPM proxy hosts to create -------------------
+mas_dns=""; mas_npm=""; mas_route=""
+if [[ "$MAS_ON" == true ]]; then
+  mas_dns="
+   ${NEO_AUTH_HOST}    -> this host   (orange-cloud — MAS)"
+  mas_npm="
+   ${NEO_AUTH_HOST}    -> neo-mas:8080"
+  mas_route="
+   ${BLD}MAS routing on ${NEO_MATRIX_HOST}${RST}: add an Advanced custom location, ordered
+   BEFORE the catch-all, so login/logout/refresh go to MAS:
+       location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://neo-mas:8080; }"
+fi
+
 cat <<EOF
 
 ${BLD}Bootstrap complete.${RST} Next steps:
@@ -115,7 +170,7 @@ ${BLD}1. DNS records${RST} (Cloudflare):
    ${NEO_SERVER_NAME}     -> this host   (orange-cloud — serves /.well-known)
    ${NEO_ELEMENT_HOST}    -> this host   (orange-cloud)
    ${NEO_ADMIN_HOST}      -> this host   (orange-cloud)
-   ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)
+   ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)${mas_dns}
    ${NEO_TURN_HOST:-turn.$NEO_SERVER_NAME}  -> ${PUBLIC_IP:-<PUBLIC_IP>}  (${BLD}grey-cloud / DNS-only${RST} — CF cannot proxy UDP)
 
 ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, over the '${PROXY_NET}' network):
@@ -123,11 +178,11 @@ ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, over the '${PROXY
    ${NEO_SERVER_NAME}  -> neo-wellknown:80    (custom location: only /.well-known/matrix/)
    ${NEO_ELEMENT_HOST} -> neo-element:80
    ${NEO_ADMIN_HOST}   -> neo-synapse-admin:80
-   ${NEO_GRAFANA_HOST} -> neo-grafana:3000
+   ${NEO_GRAFANA_HOST} -> neo-grafana:3000${mas_npm}${mas_route}
 
 ${BLD}3. Start the stack:${RST}
    docker compose up -d
 
 ${BLD}4. Create the first admin user:${RST}
-   ./scripts/register-user.sh
+   ./scripts/register-user.sh --admin
 EOF

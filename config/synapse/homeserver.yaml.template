@@ -42,13 +42,9 @@ caches:
   event_cache_size: "20K"
   expiry_time: 30m
 
-# Private + federated: registration is closed except via admin-minted tokens.
-# The first admin is created out-of-band with scripts/register-user.sh, which
-# uses registration_shared_secret and bypasses the token requirement.
-enable_registration: true
-registration_requires_token: true
-registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
-enable_registration_without_verification: false
+# The auth block (built-in registration vs. delegated MAS) is appended here by
+# scripts/bootstrap.sh from config/synapse/auth.{local,mas}.yaml.template,
+# depending on whether `mas` is in COMPOSE_PROFILES.
 
 macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET}"
 form_secret: "${SYNAPSE_FORM_SECRET}"

@@ -98,23 +98,59 @@ Coturn cannot be reverse-proxied — TURN/STUN are not HTTP. It runs with
 
 ## Users and registration
 
-Registration is closed except via admin-minted tokens.
+The helper scripts detect whether MAS is enabled and route accordingly.
 
-- **First admin:** `./scripts/register-user.sh` (uses the shared secret, bypasses
-  tokens; answer "yes" to make it an admin).
+**Built-in auth (no `mas` profile)** — registration closed except via tokens:
+- **First admin:** `./scripts/register-user.sh --admin` (shared secret, bypasses tokens).
 - **Invite others:** `ADMIN_TOKEN=syt_... ./scripts/mint-token.sh 1` mints a
-  single-use registration token. Get `ADMIN_TOKEN` from Element →
-  Settings → Help & About → Advanced → Access Token.
+  single-use token. Get `ADMIN_TOKEN` from Element → Settings → Help & About →
+  Advanced → Access Token.
+
+**With MAS (`mas` profile)** — MAS owns auth (see below).
+- **First admin:** `./scripts/register-user.sh --admin` (runs `mas-cli manage register-user`).
+- **Invite others:** `./scripts/mint-token.sh 1` mints a MAS registration token;
+  the invitee signs up at `https://<NEO_AUTH_HOST>`.
+- **Synapse Admin token:** `./scripts/mas-admin-token.sh <username>` — required to
+  log into Ketesa, because password/compat sessions can't use the admin API.
+
+## Authentication with MAS
+
+Add `mas` to `COMPOSE_PROFILES` **before first launch** to delegate authentication
+to [Matrix Authentication Service](https://element-hq.github.io/matrix-authentication-service/)
+(OAuth2/OIDC). This is an install-time decision — switching auth modes after users
+exist is painful. Password login still works (MAS's compatibility layer), and
+self-service signup is enabled behind invite tokens.
+
+What Neo wires up for you (via `bootstrap.sh`):
+- A `mas` container and its own `mas` Postgres database.
+- `config/mas/config.yaml` generated once (keeps MAS's secrets/keys) and patched
+  with this deployment's URLs, database, and the shared `MAS_MATRIX_SECRET`.
+- Synapse's `homeserver.yaml` gets the `matrix_authentication_service` block, and
+  local registration/password auth are disabled (Synapse won't start otherwise).
+- The client well-known gains the `org.matrix.msc2965.authentication` block.
+
+You still wire two things in NPM (bootstrap prints them):
+- A proxy host `NEO_AUTH_HOST → neo-mas:8080`, plus its orange-cloud DNS record.
+- On the matrix host, an **Advanced custom location ordered before** the catch-all,
+  sending `login`/`logout`/`refresh` to MAS:
+  ```
+  location ~ ^/_matrix/client/(.*)/(login|logout|refresh) { proxy_pass http://neo-mas:8080; }
+  ```
+
+Note: mobile **Element X** and QR-code login require MAS; this is what enables them.
+Greenfield only — no `syn2mas` migration needed.
 
 ## Backups
 
 Three things are unrecoverable if lost — back them up off-host:
 
 1. **Database:** `docker compose exec postgres pg_dump -U synapse synapse | gzip > synapse.sql.gz`.
-   Restore into a fresh **UTF8 + C-locale** database only.
+   Restore into a fresh **UTF8 + C-locale** database only. With MAS, also dump the
+   `mas` database (`pg_dump -U synapse mas`).
 2. **Media + signing key:** the `./data/synapse` directory (`signing.key` here is
    your federation identity — losing it breaks trust with every server you know).
-3. **`.env`:** holds every secret.
+3. **Secrets:** `.env` (all secrets) and, with MAS, `config/mas/config.yaml`
+   (MAS's own encryption + signing keys).
 
 ## Verifying a deployment
 
@@ -146,7 +182,5 @@ deferred profile) — not worth the complexity at this scale.
 
 ## Deliberately deferred
 
-- **Matrix Authentication Service (MAS):** off for simplicity. Mobile **Element X**
-  and QR-code login require it — add it later if you need them.
 - **Workers / scaling:** ships monolithic; workers (and Redis) are a future profile.
 - **Bridges:** not included; the profile pattern makes them easy to add.

@@ -11,3 +11,4 @@
 /config/monitoring/prometheus.yml
 /config/wellknown/*.json
 /config/element/config.json
+/config/mas/config.yaml

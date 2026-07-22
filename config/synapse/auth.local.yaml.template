@@ -1,0 +1,7 @@
+# Built-in Synapse auth (MAS disabled). Appended to homeserver.yaml by bootstrap.
+# Registration is closed except via admin-minted tokens; the first admin is made
+# out-of-band with scripts/register-user.sh (uses the shared secret, bypasses tokens).
+enable_registration: true
+registration_requires_token: true
+registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
+enable_registration_without_verification: false
