@@ -66,6 +66,9 @@ name + port over the `NEO_PROXY_NETWORK`):
    client IP from Cloudflare (see below).
 2. **`NEO_SERVER_NAME` (apex) → `neo-wellknown:80`** — use a **custom location**
    for `/.well-known/matrix/` only, so any existing site on the apex is untouched.
+   *If the apex is served elsewhere (a different NPM/host), you can't add a location
+   here — instead serve the two well-known files at the Cloudflare edge with the
+   Worker in [`cloudflare/`](cloudflare/) and set `NEO_WELLKNOWN_EXTERNAL=true`.*
 3. `NEO_ELEMENT_HOST`, `NEO_ADMIN_HOST`, `NEO_GRAFANA_HOST` → their containers.
 
 ### Real client IP

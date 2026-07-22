@@ -1,0 +1,14 @@
+name = "neo-wellknown"
+main = "well-known-worker.js"
+compatibility_date = "2026-07-01"
+
+# Fire only for the Matrix well-known paths on the apex — the rest of the site is
+# untouched. zone_name must be a zone in the Cloudflare account you deploy with.
+routes = [
+  { pattern = "mart.fyi/.well-known/matrix/*", zone_name = "mart.fyi" },
+]
+
+[vars]
+MATRIX_HOST = "matrix.mart.fyi"
+# Set to your MAS host to advertise delegated auth; leave blank/remove without MAS.
+AUTH_HOST = "mauth.mart.fyi"

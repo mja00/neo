@@ -149,6 +149,15 @@ if [[ "$MAS_ON" == true ]]; then
 fi
 
 # --- 7. Print the DNS records and NPM proxy hosts to create -------------------
+# Apex well-known: served here by neo-wellknown, or externally (e.g. CF Worker).
+if [[ "${NEO_WELLKNOWN_EXTERNAL:-false}" == true ]]; then
+  apex_dns="${NEO_SERVER_NAME}     -> well-known served externally (see cloudflare/)"
+  apex_npm="   (apex proxy host not needed — well-known is served at the edge)"
+else
+  apex_dns="${NEO_SERVER_NAME}     -> this host   (orange-cloud — serves /.well-known)"
+  apex_npm="   ${NEO_SERVER_NAME}  -> neo-wellknown:80    (custom location: only /.well-known/matrix/)"
+fi
+
 mas_dns=""; mas_npm=""; mas_route=""
 if [[ "$MAS_ON" == true ]]; then
   mas_dns="
@@ -167,7 +176,7 @@ ${BLD}Bootstrap complete.${RST} Next steps:
 
 ${BLD}1. DNS records${RST} (Cloudflare):
    ${NEO_MATRIX_HOST}     -> this host   (orange-cloud / proxied)
-   ${NEO_SERVER_NAME}     -> this host   (orange-cloud — serves /.well-known)
+   ${apex_dns}
    ${NEO_ELEMENT_HOST}    -> this host   (orange-cloud)
    ${NEO_ADMIN_HOST}      -> this host   (orange-cloud)
    ${NEO_GRAFANA_HOST}    -> this host   (orange-cloud)${mas_dns}
@@ -175,7 +184,7 @@ ${BLD}1. DNS records${RST} (Cloudflare):
 
 ${BLD}2. nginx proxy manager hosts${RST} (Forward scheme http, over the '${PROXY_NET}' network):
    ${NEO_MATRIX_HOST}  -> neo-synapse:8008    (proxy the whole /_matrix prefix; set client_max_body_size ${SYNAPSE_MAX_UPLOAD_SIZE})
-   ${NEO_SERVER_NAME}  -> neo-wellknown:80    (custom location: only /.well-known/matrix/)
+${apex_npm}
    ${NEO_ELEMENT_HOST} -> neo-element:80
    ${NEO_ADMIN_HOST}   -> neo-synapse-admin:80
    ${NEO_GRAFANA_HOST} -> neo-grafana:3000${mas_npm}${mas_route}
