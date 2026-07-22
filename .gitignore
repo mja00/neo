@@ -12,3 +12,7 @@
 /config/wellknown/*.json
 /config/element/config.json
 /config/mas/config.yaml
+
+# Python bytecode cache
+__pycache__/
+*.pyc
