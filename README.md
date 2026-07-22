@@ -269,21 +269,28 @@ The **`stickers`** profile serves the [maunium sticker picker](https://github.co
 `web/`; add the `NEO_STICKERS_HOST` proxy host bootstrap prints, then in Element open
 a room → sticker icon → set the picker URL to `https://<NEO_STICKERS_HOST>/`.
 
-To turn a set of images (e.g. exported Discord emotes) into **inline emoji** — the
-`:shortcode:` kind that render in the timeline — use the helper, which uploads them to
-the media repo and installs an [MSC2545](https://github.com/matrix-org/matrix-spec-proposals/pull/2545)
-image pack. Each file's name becomes its shortcode:
+`scripts/emote-import.py` turns a folder of images (e.g. exported Discord/neofox
+emotes) into a pack. Each file's name becomes its shortcode. It uploads once and can
+install two things:
+
+- **Stickers** (`--stickers`) — writes a maunium picker pack into the picker's
+  `web/packs`, so they appear under Element's sticker button. Run this where
+  `data/stickerpicker` lives (i.e. on the deploy host).
+- **Inline emotes** (default) — an [MSC2545](https://github.com/matrix-org/matrix-spec-proposals/pull/2545)
+  `im.ponies` pack (personal account data, or `--room` for a shared room pack).
+  **Element Web/Desktop does not render these inline** — they show in MSC2545 clients
+  (SchildiChat, Cinny, FluffyChat, Nheko). For Element, use `--stickers`.
 
 ```bash
-# personal pack (account data) — available to you in every room
-MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --pack-name discord ./my-emotes
-# or a shared room pack (needs permission to set room state)
-MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --room '!id:server' ./my-emotes
+# both, personal inline pack + sticker picker pack (run on the deploy host):
+MATRIX_ACCESS_TOKEN=mct_... ./scripts/emote-import.py --pack-name neofox --stickers ./neofox
+# stickers only:
+MATRIX_ACCESS_TOKEN=mct_... ./scripts/emote-import.py --pack-name neofox --stickers --no-emotes ./neofox
 ```
 
-Get the token from Element → Settings → Help & About → Advanced → Access Token. Repeat
-runs merge into your personal pack. Stickers (as opposed to inline emoji) are created
-with maunium's own `sticker-pack` tool, which the clone brings along.
+Use a **long-lived** token — `./scripts/mas-admin-token.sh <user>` on MAS deployments;
+Element's UI access token is short-lived and 401s mid-import. Repeat runs merge into the
+personal pack / picker index.
 
 ## Deliberately deferred
 

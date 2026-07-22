@@ -235,8 +235,9 @@ if [[ "$STICKERS_ON" == true ]]; then
   stickers_note="
    ${BLD}Stickers on ${NEO_STICKERS_HOST}${RST}: in Element, open a room, click the sticker
    icon in the composer, then set the picker URL to https://${NEO_STICKERS_HOST}/
-   Convert Discord emotes to inline emoji (drop the images in a folder first):
-       MATRIX_ACCESS_TOKEN=syt_... ./scripts/emote-import.py --pack-name discord ./my-emotes"
+   Import a folder of images as stickers (+ inline emotes for MSC2545 clients):
+       MATRIX_ACCESS_TOKEN=mct_... ./scripts/emote-import.py --pack-name mypack --stickers ./my-emotes
+   (get a long-lived token with ./scripts/mas-admin-token.sh <user>)"
 fi
 
 cat <<EOF
