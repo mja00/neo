@@ -1,0 +1,76 @@
+# Rendered by scripts/bootstrap.sh from this template — do not edit the rendered
+# homeserver.yaml directly (it is regenerated). Edit this template instead.
+
+server_name: "${NEO_SERVER_NAME}"
+public_baseurl: "https://${NEO_MATRIX_HOST}/"
+pid_file: /data/homeserver.pid
+signing_key_path: "/data/signing.key"
+log_config: "/data/log.config"
+media_store_path: "/data/media"
+
+# Single HTTP listener behind nginx proxy manager, serving both the client-server
+# and federation APIs. x_forwarded trusts the proxy's forwarded client IP.
+listeners:
+  - port: 8008
+    type: http
+    tls: false
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client, federation]
+        compress: false
+
+  # Prometheus scrape target. Only reachable on the internal Docker network,
+  # never published to the host.
+  - port: 9000
+    type: metrics
+    bind_addresses: ['0.0.0.0']
+
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: "${POSTGRES_PASSWORD}"
+    database: synapse
+    host: postgres
+    cp_min: 5
+    cp_max: 10
+
+# Plenty of RAM headroom on a 32 GB box for a few users, so keep caches warm.
+caches:
+  global_factor: 2.0
+  event_cache_size: "20K"
+  expiry_time: 30m
+
+# Private + federated: registration is closed except via admin-minted tokens.
+# The first admin is created out-of-band with scripts/register-user.sh, which
+# uses registration_shared_secret and bypasses the token requirement.
+enable_registration: true
+registration_requires_token: true
+registration_shared_secret: "${SYNAPSE_REGISTRATION_SHARED_SECRET}"
+enable_registration_without_verification: false
+
+macaroon_secret_key: "${SYNAPSE_MACAROON_SECRET}"
+form_secret: "${SYNAPSE_FORM_SECRET}"
+
+max_upload_size: "${SYNAPSE_MAX_UPLOAD_SIZE}"
+
+# URL previews fetch arbitrary URLs server-side (SSRF surface); off by default.
+url_preview_enabled: false
+
+report_stats: false
+suppress_key_server_warning: true
+trusted_key_servers:
+  - server_name: "matrix.org"
+
+enable_metrics: true
+
+# VoIP relay. turn_shared_secret must match Coturn's static-auth-secret. These
+# are harmless when the coturn profile is disabled.
+turn_uris:
+  - "turn:${NEO_TURN_HOST}:3478?transport=udp"
+  - "turn:${NEO_TURN_HOST}:3478?transport=tcp"
+  - "turns:${NEO_TURN_HOST}:5349?transport=tcp"
+turn_shared_secret: "${COTURN_STATIC_AUTH_SECRET}"
+turn_user_lifetime: 86400000
+turn_allow_guests: false

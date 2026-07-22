@@ -1,0 +1,13 @@
+# Secrets and local runtime state — never commit these.
+.env
+
+# Persistent data volumes (postgres, synapse media + signing key, grafana, prometheus).
+/data/
+
+# Rendered config produced by scripts/bootstrap.sh from the *.template files.
+/config/synapse/homeserver.yaml
+/config/synapse/log.config
+/config/coturn/turnserver.conf
+/config/monitoring/prometheus.yml
+/config/wellknown/*.json
+/config/element/config.json

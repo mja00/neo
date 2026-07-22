@@ -1,0 +1,12 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "https://${NEO_MATRIX_HOST}",
+      "server_name": "${NEO_SERVER_NAME}"
+    }
+  },
+  "brand": "Neo",
+  "disable_guests": true,
+  "disable_custom_urls": false,
+  "default_theme": "dark"
+}

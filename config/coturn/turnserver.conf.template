@@ -1,0 +1,38 @@
+# Coturn TURN/STUN — rendered by bootstrap.sh. Runs with host networking.
+# bootstrap.sh appends the TLS cert/pkey lines when COTURN_TLS_CERT is set.
+
+listening-port=3478
+tls-listening-port=5349
+
+# Relay port range — must be published/reachable on the host. Each concurrent
+# relayed stream consumes one port.
+min-port=${COTURN_MIN_PORT}
+max-port=${COTURN_MAX_PORT}
+
+# Synapse authenticates against this shared secret (matches turn_shared_secret).
+use-auth-secret
+static-auth-secret=${COTURN_STATIC_AUTH_SECRET}
+realm=${NEO_SERVER_NAME}
+
+# Required when the host is behind 1:1 NAT so relay candidates advertise the
+# routable address rather than a private one.
+external-ip=${PUBLIC_IP}
+
+# Hardening: stop the relay being abused to reach internal/link-local networks.
+no-multicast-peers
+no-tcp-relay
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+
+fingerprint
+stale-nonce=600
+no-tlsv1
+no-tlsv1_1

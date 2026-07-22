@@ -1,0 +1,214 @@
+# Neo — Matrix all-in-one. Toggle optional services via COMPOSE_PROFILES in .env.
+# Run ./scripts/bootstrap.sh once before `docker compose up -d`.
+#
+# Tuned for: Xeon D-1540 (8c/16t), 32 GB RAM, NVMe RAID, a handful of users.
+# The box is heavily over-provisioned for this load, so limits below exist to
+# stop any one service ballooning — not because resources are tight.
+
+name: neo
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  # --- Core -----------------------------------------------------------------
+
+  postgres:
+    <<: *restart
+    image: postgres:${POSTGRES_IMAGE_TAG}
+    container_name: neo-postgres
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_DB: synapse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Synapse rejects any collation but C; force it at cluster init. Explicit
+      # --encoding is required or a C locale defaults the encoding to SQL_ASCII.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C"
+    # Tuning appended to image defaults. Cache sizes are generous for a small DB
+    # (headroom on 32 GB); cost/concurrency settings assume NVMe; parallelism
+    # matches the 8-core CPU.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB
+      - -c
+      - effective_cache_size=8GB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=100
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - wal_compression=on
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - min_wal_size=512MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - max_worker_processes=8
+      - -c
+      - max_parallel_workers=8
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - max_parallel_maintenance_workers=2
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [neo-internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+
+  synapse:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-synapse
+    # Run as the host user so the ./data/synapse bind mount stays writable.
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_CONFIG_PATH: /data/homeserver.yaml
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+    # On neo-internal to reach Postgres, and on the proxy network both so NPM
+    # resolves it by name AND so federation has a route to the internet.
+    networks: [neo-internal, proxy]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+
+  wellknown:
+    <<: *restart
+    image: nginx:1.27-alpine
+    container_name: neo-wellknown
+    volumes:
+      - ./config/wellknown/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/wellknown/server.json:/usr/share/nginx/html/.well-known/matrix/server:ro
+      - ./config/wellknown/client.json:/usr/share/nginx/html/.well-known/matrix/client:ro
+    networks: [proxy]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --- element profile ------------------------------------------------------
+
+  element:
+    <<: *restart
+    image: vectorim/element-web:${ELEMENT_IMAGE_TAG}
+    container_name: neo-element
+    profiles: [element]
+    volumes:
+      - ./config/element/config.json:/app/config.json:ro
+    networks: [proxy]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --- admin profile --------------------------------------------------------
+
+  synapse-admin:
+    <<: *restart
+    image: ghcr.io/etkecc/ketesa:${KETESA_IMAGE_TAG}
+    container_name: neo-synapse-admin
+    profiles: [admin]
+    networks: [proxy]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # --- coturn profile -------------------------------------------------------
+
+  coturn:
+    <<: *restart
+    image: coturn/coturn:${COTURN_IMAGE_TAG}
+    container_name: neo-coturn
+    profiles: [coturn]
+    # Host networking is mandatory: Docker's NAT rewrites relay candidates and
+    # TURN calls never connect through a bridge network.
+    network_mode: host
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./config/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      # Cert dir for turns:// (5349). Points at COTURN_CERT_DIR on the host.
+      - ${COTURN_CERT_DIR:-./config/coturn}:/certs:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # --- monitoring profile ---------------------------------------------------
+
+  prometheus:
+    <<: *restart
+    image: prom/prometheus:${PROMETHEUS_IMAGE_TAG}
+    container_name: neo-prometheus
+    profiles: [monitoring]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./config/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [neo-internal]
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  grafana:
+    <<: *restart
+    image: grafana/grafana:${GRAFANA_IMAGE_TAG}
+    container_name: neo-grafana
+    profiles: [monitoring]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      # Required so redirects and asset URLs work behind the reverse proxy.
+      GF_SERVER_ROOT_URL: https://${NEO_GRAFANA_HOST}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./config/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [neo-internal, proxy]
+    depends_on: [prometheus]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  neo-internal:
+    internal: true
+  proxy:
+    external: true
+    name: ${NEO_PROXY_NETWORK:-nginxproxymanager_default}
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

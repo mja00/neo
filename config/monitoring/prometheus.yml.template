@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: synapse
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['synapse:9000']
