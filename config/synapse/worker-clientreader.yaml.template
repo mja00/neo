@@ -1,0 +1,19 @@
+# Client read worker — owns the expensive read endpoints (room hierarchy, publicRooms,
+# profile, user_directory) that otherwise fall through to main, kept off the /sync path
+# so space loads don't stall client sync. Loaded alongside homeserver.yaml. HTTP
+# listener is behind nginx proxy manager (x_forwarded).
+worker_app: synapse.app.generic_worker
+worker_name: neo-clientreader
+worker_log_config: /data/log.config
+
+worker_listeners:
+  - type: http
+    port: 8085
+    x_forwarded: true
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [client]
+        compress: false
+  - type: metrics
+    bind_addresses: ['0.0.0.0']
+    port: 9105

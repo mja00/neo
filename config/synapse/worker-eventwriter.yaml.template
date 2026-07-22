@@ -1,0 +1,18 @@
+# events stream-writer — loaded alongside homeserver.yaml. worker_name must match
+# the stream_writers.events + instance_map entries in workers.yaml. Once set, main
+# stops persisting events and all event persistence (plus its state resolution)
+# runs here. No client/federation listener, so nothing to route in the reverse proxy.
+worker_app: synapse.app.generic_worker
+worker_name: neo-eventwriter
+worker_log_config: /data/log.config
+
+worker_listeners:
+  # Replication endpoint so main can forward event persistence here (instance_map).
+  - type: http
+    port: 9094
+    bind_addresses: ['0.0.0.0']
+    resources:
+      - names: [replication]
+  - type: metrics
+    bind_addresses: ['0.0.0.0']
+    port: 9104

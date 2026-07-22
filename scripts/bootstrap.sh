@@ -118,7 +118,9 @@ if [[ "$WORKERS_ON" == true ]]; then
   render_to config/synapse/worker-fedsender.yaml.template config/synapse/worker-fedsender.yaml
   render_to config/synapse/worker-fedreader.yaml.template config/synapse/worker-fedreader.yaml
   render_to config/synapse/worker-synchrotron.yaml.template config/synapse/worker-synchrotron.yaml
-  info "Workers: federation sender + reader + sync enabled."
+  render_to config/synapse/worker-eventwriter.yaml.template config/synapse/worker-eventwriter.yaml
+  render_to config/synapse/worker-clientreader.yaml.template config/synapse/worker-clientreader.yaml
+  info "Workers: federation sender + reader + sync + eventwriter + clientreader enabled."
 fi
 
 # TURN over TLS: append cert lines only when a cert path is configured.
@@ -194,6 +196,13 @@ if [[ "$WORKERS_ON" == true ]]; then
        location ~ ^/_matrix/client/(api/v1|r0|v3)/(events|initialSync)\$ { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
        location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(messages|context|members|state)\$ { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
        location ~ ^/_matrix/client/(r0|v3|unstable)/keys/query\$         { proxy_pass http://127.0.0.1:${NEO_PORT_SYNCHROTRON:-8807}; }
+       location ~ ^/_matrix/client/(v1|r0|v3|unstable)/rooms/.*/hierarchy\$ { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(joined_members|aliases)\$ { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(r0|v3|unstable)/publicRooms\$        { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(r0|v3)/joined_rooms\$               { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(r0|v3)/profile/                     { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(r0|v3|unstable)/keys/changes\$       { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
+       location ~ ^/_matrix/client/(r0|v3|unstable)/user_directory/search\$ { proxy_pass http://127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}; }
        location ~ ^/_matrix/federation/                                 { proxy_pass http://127.0.0.1:${NEO_PORT_FEDREADER:-8806}; }
    Add proxy_set_header Host \$host / X-Forwarded-For / X-Forwarded-Proto \$scheme to each."
 fi

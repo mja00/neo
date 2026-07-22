@@ -10,8 +10,18 @@ redis:
 federation_sender_instances:
   - neo-fedsender
 
-# Where workers reach the main process's replication listener (below in listeners).
+# Where workers reach each other's replication listeners. main's is in homeserver.yaml
+# listeners; the events writer's is in worker-eventwriter.yaml (host = compose service).
 instance_map:
   main:
     host: synapse
     port: 9093
+  neo-eventwriter:
+    host: eventwriter
+    port: 9094
+
+# Move event persistence (and the state resolution that rides with it) off the
+# single-threaded main process onto the dedicated writer.
+stream_writers:
+  events:
+    - neo-eventwriter

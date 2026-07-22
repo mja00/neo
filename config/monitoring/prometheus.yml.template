@@ -23,6 +23,16 @@ scrape_configs:
     static_configs:
       - targets: ['synchrotron:9103']
 
+  - job_name: synapse-eventwriter
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['eventwriter:9104']
+
+  - job_name: synapse-clientreader
+    metrics_path: /_synapse/metrics
+    static_configs:
+      - targets: ['clientreader:9105']
+
   - job_name: node
     static_configs:
       - targets: ['node-exporter:9100']

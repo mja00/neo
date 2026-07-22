@@ -52,7 +52,7 @@ Secrets (`*_SECRET`, `*_PASSWORD`) are left blank; `bootstrap.sh` fills them.
 | `admin` | Synapse Admin (Ketesa) | `127.0.0.1:8804` (→ 80) |
 | `coturn` | Coturn (VoIP) | _not proxied — host ports_ |
 | `monitoring` | Prometheus + Grafana + node-exporter + cAdvisor | `127.0.0.1:8805` (→ Grafana 3000) |
-| `workers` | Redis + federation-sender worker | _internal only — no proxy_ |
+| `workers` | Redis + federation sender/reader, synchrotron, events writer, client reader | fedreader `8806`, synchrotron `8807`, client reader `8808` (sender + writer: internal only) |
 
 Postgres runs on an internal-only network. Redis is only started with the
 `workers` profile (it's the replication bus for worker mode); a monolithic Synapse
@@ -211,18 +211,19 @@ federation to a separate `neo-fedsender` process (adds Redis as the replication 
 COMPOSE_PROFILES=...,workers   # then ./scripts/bootstrap.sh && docker compose up -d
 ```
 
-`bootstrap.sh` appends the redis + `federation_sender_instances` + `instance_map`
-block to `homeserver.yaml` and renders the worker config; the main process gets an
-internal replication listener on `9093`. **No reverse-proxy changes** — the sender is
-outbound-only. The federation DNS/egress load moves to the worker, which is why it
-carries the same pinned resolvers as the main process.
+`bootstrap.sh` appends the redis + `federation_sender_instances` + `instance_map` +
+`stream_writers` block to `homeserver.yaml` and renders the worker configs; the main
+process gets an internal replication listener on `9093`. The sender is outbound-only
+(no reverse-proxy changes); the other workers need the NPM routing below. The
+federation DNS/egress load moves to the workers, which is why they carry the same
+pinned resolvers as the main process.
 
-The `workers` profile also starts two **Phase 2** workers — `neo-fedreader`
+The `workers` profile also starts the **Phase 2** workers — `neo-fedreader`
 (inbound federation, the `/_matrix/federation/*` firehose) and `neo-synchrotron`
 (client `/sync` + heavy room reads) — so a big, busy room's incoming events stop
-starving client sync. Unlike the sender, these serve HTTP and **require NPM routing**:
-add these ordered Advanced custom locations to the `matrix` proxy host (bootstrap
-prints them with your ports + the proxy headers):
+starving client sync — plus the **Phase 3** workers below. Unlike the sender, the
+HTTP-serving workers **require NPM routing**: add these ordered Advanced custom
+locations to the `matrix` proxy host (bootstrap prints them with your ports + headers):
 
 ```nginx
 # after the MAS rule; regex first-match wins, all beat NPM's default forward
@@ -230,16 +231,35 @@ location ~ ^/_matrix/client/(r0|v3)/sync$                        { proxy_pass ht
 location ~ ^/_matrix/client/(api/v1|r0|v3)/(events|initialSync)$ { proxy_pass http://127.0.0.1:8807; }
 location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(messages|context|members|state)$ { proxy_pass http://127.0.0.1:8807; }
 location ~ ^/_matrix/client/(r0|v3|unstable)/keys/query$         { proxy_pass http://127.0.0.1:8807; }
+location ~ ^/_matrix/client/(v1|r0|v3|unstable)/rooms/.*/hierarchy$ { proxy_pass http://127.0.0.1:8808; }  # client reader
+location ~ ^/_matrix/client/(api/v1|r0|v3|unstable)/rooms/.*/(joined_members|aliases)$ { proxy_pass http://127.0.0.1:8808; }
+location ~ ^/_matrix/client/(r0|v3|unstable)/publicRooms$        { proxy_pass http://127.0.0.1:8808; }
+location ~ ^/_matrix/client/(r0|v3)/joined_rooms$               { proxy_pass http://127.0.0.1:8808; }
+location ~ ^/_matrix/client/(r0|v3)/profile/                     { proxy_pass http://127.0.0.1:8808; }
+location ~ ^/_matrix/client/(r0|v3|unstable)/keys/changes$       { proxy_pass http://127.0.0.1:8808; }
+location ~ ^/_matrix/client/(r0|v3|unstable)/user_directory/search$ { proxy_pass http://127.0.0.1:8808; }
 location ~ ^/_matrix/federation/                                 { proxy_pass http://127.0.0.1:8806; }  # fedreader
 ```
 
 Client writes, `/_matrix/key/*`, and media intentionally stay on main. Without the
-routing the workers just idle — you must add it for them to take load. On this box's
-8 slow cores, this spreads main / sender / reader / sync across four processes.
+routing the workers just idle — you must add it for them to take load.
+
+### Phase 3 — event persistence + client reads off main
+
+Monolithic main is single-threaded, so on a big federated room join it pins one core
+doing **event persistence + state resolution** while the others idle. Phase 3 splits
+that off:
+
+- `neo-eventwriter` — the `events` **stream writer**. Setting `stream_writers.events`
+  makes main stop persisting events; persistence (and its state resolution) runs here.
+  Replication-only, so **no proxy routing** needed.
+- `neo-clientreader` — owns the expensive read endpoints (room `hierarchy`,
+  `publicRooms`, `profile`, `user_directory`) that otherwise fall through to main and
+  pin it when loading a large space; the routing above sends them to `8808`.
+
+On this box's slow cores, the full profile spreads work across six processes: main /
+sender / reader / sync / events writer / client reader.
 
 ## Deliberately deferred
 
-- **Events stream writer (Phase 3):** event *persistence* still runs on main. If a
-  busy room still pins main after Phase 2 (on persistence, not federation/sync), move
-  the `events` stream to a writer worker. Measure first.
 - **Bridges:** not included; the profile pattern makes them easy to add.

@@ -403,6 +403,71 @@ services:
         limits:
           memory: 2G
 
+  # Events stream-writer — event persistence + state resolution off the main process.
+  # Replication-only (no HTTP client/federation listener), so nothing to proxy.
+  eventwriter:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-eventwriter
+    profiles: [workers]
+    init: true
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    command: ["run", "--config-path", "/data/homeserver.yaml", "--config-path", "/config/worker-eventwriter.yaml"]
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+      - ./config/synapse/worker-eventwriter.yaml:/config/worker-eventwriter.yaml:ro
+    # Persistence pulls missing events/state outbound during backfill → egress + DNS.
+    networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          # State resolution spikes hard on big-room joins — same ceiling as fedreader.
+          memory: 4G
+
+  # Client read worker — hierarchy/publicRooms/profile/user_directory reads off main.
+  clientreader:
+    <<: *restart
+    image: ghcr.io/element-hq/synapse:${SYNAPSE_IMAGE_TAG}
+    container_name: neo-clientreader
+    profiles: [workers]
+    init: true
+    user: "${NEO_PUID:-1000}:${NEO_PGID:-1000}"
+    environment:
+      SYNAPSE_WORKER: synapse.app.generic_worker
+    command: ["run", "--config-path", "/data/homeserver.yaml", "--config-path", "/config/worker-clientreader.yaml"]
+    volumes:
+      - ./data/synapse:/data
+      - ./config/synapse/homeserver.yaml:/data/homeserver.yaml:ro
+      - ./config/synapse/log.config:/data/log.config:ro
+      - ./config/synapse/worker-clientreader.yaml:/config/worker-clientreader.yaml:ro
+    networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    ports:
+      - "127.0.0.1:${NEO_PORT_CLIENTREADER:-8808}:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
 networks:
   neo-internal:
     internal: true
