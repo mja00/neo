@@ -179,6 +179,10 @@ services:
     # Ketesa (static-web-server) listens on 8080 despite the image's EXPOSE 80.
     ports:
       - "127.0.0.1:${NEO_PORT_ADMIN:-8804}:8080"
+    # externalAuthProvider flips Ketesa to its MAS-native panel (users, sessions,
+    # registration tokens) since Synapse's own admin registration API is off under MAS.
+    volumes:
+      - ./config/synapse-admin/config.json:/home/sws/public/config.json:ro
     deploy:
       resources:
         limits:

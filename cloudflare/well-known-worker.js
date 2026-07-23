@@ -28,6 +28,8 @@ export default {
           issuer: `https://${env.AUTH_HOST}/`,
           account: `https://${env.AUTH_HOST}/account`,
         };
+        // Tells Ketesa to manage users/sessions/tokens through MAS, not Synapse.
+        body["cc.etke.ketesa"] = { externalAuthProvider: true };
       }
       return Response.json(body, { headers });
     }

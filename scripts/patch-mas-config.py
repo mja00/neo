@@ -5,6 +5,7 @@
 http/database/matrix sections we must replace with our topology. We overwrite
 only those sections and leave everything else (notably `secrets`) untouched.
 """
+
 import os
 import sys
 
@@ -18,15 +19,28 @@ auth_host = os.environ["NEO_AUTH_HOST"]
 server_name = os.environ["NEO_SERVER_NAME"]
 pg_password = os.environ["POSTGRES_PASSWORD"]
 matrix_secret = os.environ["MAS_MATRIX_SECRET"]
+# Comma-separated localparts granted the MAS admin scope; drives Ketesa's MAS panel.
+mas_admins = [
+    u.strip() for u in os.environ.get("NEO_MAS_ADMIN_USERS", "").split(",") if u.strip()
+]
 
 cfg["http"] = {
     "public_base": f"https://{auth_host}/",
     "listeners": [
         {
             "name": "web",
+            # adminapi backs Ketesa's MAS-native management (users, sessions, tokens).
             "resources": [
                 {"name": n}
-                for n in ("discovery", "human", "oauth", "compat", "graphql", "assets")
+                for n in (
+                    "discovery",
+                    "human",
+                    "oauth",
+                    "compat",
+                    "graphql",
+                    "assets",
+                    "adminapi",
+                )
             ],
             "binds": [{"host": "0.0.0.0", "port": 8080}],
         }
@@ -50,6 +64,11 @@ cfg.setdefault("passwords", {})["enabled"] = True
 account = cfg.setdefault("account", {})
 account["password_registration_enabled"] = True
 account["registration_token_required"] = True
+
+# Grant the admin scope to named localparts; merged into policy.data so the
+# generated default policy (its wasm ref, if any) stays intact.
+if mas_admins:
+    cfg.setdefault("policy", {}).setdefault("data", {})["admin_users"] = mas_admins
 
 with open(path, "w") as f:
     yaml.safe_dump(cfg, f, sort_keys=False)

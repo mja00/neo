@@ -5,5 +5,8 @@
   "org.matrix.msc2965.authentication": {
     "issuer": "https://${NEO_AUTH_HOST}/",
     "account": "https://${NEO_AUTH_HOST}/account"
+  },
+  "cc.etke.ketesa": {
+    "externalAuthProvider": true
   }
 }
