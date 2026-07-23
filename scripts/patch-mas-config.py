@@ -23,6 +23,8 @@ matrix_secret = os.environ["MAS_MATRIX_SECRET"]
 mas_admins = [
     u.strip() for u in os.environ.get("NEO_MAS_ADMIN_USERS", "").split(",") if u.strip()
 ]
+github_client_id = os.environ.get("NEO_GITHUB_CLIENT_ID", "").strip()
+github_client_secret = os.environ.get("NEO_GITHUB_CLIENT_SECRET", "").strip()
 
 cfg["http"] = {
     "public_base": f"https://{auth_host}/",
@@ -69,6 +71,45 @@ account["registration_token_required"] = True
 # generated default policy (its wasm ref, if any) stays intact.
 if mas_admins:
     cfg.setdefault("policy", {}).setdefault("data", {})["admin_users"] = mas_admins
+
+# GitHub is plain OAuth2 (no OIDC discovery / id_token), so disable discovery and
+# read claims from the userinfo endpoint. The id is a fixed ULID baked into the
+# GitHub app's callback URL, so it must never change across regenerations.
+if github_client_id and github_client_secret:
+    cfg.setdefault("upstream_oauth2", {})["providers"] = [
+        {
+            "id": "01KY80Y4J98Q0NS0DY1HHM184V",
+            "human_name": "GitHub",
+            "brand_name": "github",
+            "discovery_mode": "disabled",
+            "fetch_userinfo": True,
+            "token_endpoint_auth_method": "client_secret_post",
+            "client_id": github_client_id,
+            "client_secret": github_client_secret,
+            "authorization_endpoint": "https://github.com/login/oauth/authorize",
+            "token_endpoint": "https://github.com/login/oauth/access_token",
+            "userinfo_endpoint": "https://api.github.com/user",
+            "scope": "read:user",
+            # New account creation via GitHub still needs a registration token.
+            "registration_token_required": True,
+            "claims_imports": {
+                "subject": {"template": "{{ userinfo_claims.id }}"},
+                "displayname": {
+                    "action": "suggest",
+                    "template": "{{ userinfo_claims.name }}",
+                },
+                "email": {
+                    "action": "suggest",
+                    "template": "{{ userinfo_claims.email }}",
+                },
+                "account_name": {"template": "@{{ userinfo_claims.login }}"},
+                "localpart": {
+                    "action": "suggest",
+                    "template": "{{ userinfo_claims.login }}",
+                },
+            },
+        }
+    ]
 
 with open(path, "w") as f:
     yaml.safe_dump(cfg, f, sort_keys=False)
