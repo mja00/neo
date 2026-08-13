@@ -69,6 +69,23 @@ def default_packs_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "data/stickerpicker/web/packs"
 
 
+def retry_after_seconds(err: urllib.error.HTTPError, detail: str, attempt: int) -> float:
+    # matrix.org sits behind Cloudflare, whose 429 sends a Retry-After header
+    # (seconds) and an HTML body; Synapse instead sends retry_after_ms in JSON.
+    header = err.headers.get("Retry-After")
+    if header:
+        try:
+            return min(float(header) + 0.5, 120)
+        except ValueError:
+            pass
+    try:
+        return min(json.loads(detail).get("retry_after_ms", 1000) / 1000 + 0.1, 120)
+    except ValueError:
+        pass
+    # No usable hint (e.g. Cloudflare HTML): back off exponentially, capped.
+    return min(2 ** attempt, 60)
+
+
 def request(method: str, url: str, token: str, *, body: bytes | None = None,
             content_type: str | None = None) -> dict:
     # A real UA avoids Cloudflare bot-fight (error 1010) blocking Python-urllib.
@@ -85,11 +102,7 @@ def request(method: str, url: str, token: str, *, body: bytes | None = None,
         except urllib.error.HTTPError as e:
             detail = e.read().decode(errors="replace")
             if e.code == 429 and attempt < 5:
-                try:
-                    wait = json.loads(detail).get("retry_after_ms", 1000) / 1000
-                except ValueError:
-                    wait = 1.0
-                time.sleep(min(wait + 0.1, 10))
+                time.sleep(retry_after_seconds(e, detail, attempt))
                 continue
             raise RuntimeError(f"{method} {url} -> {e.code}: {detail}") from e
 
@@ -205,6 +218,8 @@ def main() -> None:
                     help="Skip the inline im.ponies pack (e.g. stickers only).")
     ap.add_argument("--packs-dir", type=Path, default=default_packs_dir(),
                     help="Where --stickers writes packs (default: the picker's web/packs).")
+    ap.add_argument("--upload-delay", type=float, default=0.5,
+                    help="Seconds to wait between uploads (default: 0.5; raise for matrix.org).")
     args = ap.parse_args()
 
     if args.no_emotes and not args.stickers:
@@ -248,6 +263,9 @@ def main() -> None:
         uploaded.append({"code": code, "mxc": mxc, "size": len(data), "data": data,
                          "ctype": ctype, "dims": image_dims(data, path.suffix.lower())})
         print(f"  :{code}: -> {mxc}")
+        # Pace uploads so we stay under the media rate limit rather than relying
+        # on 429 backoff; matrix.org's limiter is far stricter than self-hosted.
+        time.sleep(args.upload_delay)
 
     if not args.no_emotes:
         install_emotes(hs, token, user_id, pack_name, args.room, new_images)
