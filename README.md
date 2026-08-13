@@ -9,6 +9,10 @@ Neo terminates no TLS itself. It expects [nginx proxy manager](https://nginxprox
 (NPM) to sit in front, handling Cloudflare → local-service TLS. Containers join the
 network NPM already owns and are proxied by name.
 
+> **AI-authored.** This project was written by AI assistants (a mix of Claude,
+> GPT-5.6, and DeepSeek) — every direction, requirement, and decision steered by
+> human prompts and review.
+
 ## Quick start
 
 ```bash
