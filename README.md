@@ -292,6 +292,68 @@ Use a **long-lived** token — `./scripts/mas-admin-token.sh <user>` on MAS depl
 Element's UI access token is short-lived and 401s mid-import. Repeat runs merge into the
 personal pack / picker index.
 
+## Smart notifications (Discord-style active-device push)
+
+The **`notifier`** profile adds a push-gateway proxy (`neo-notifier`) that stops your
+phone from buzzing while you're actively reading on desktop. When a push would be sent
+to a managed user's mobile pusher (Element X, Element Android), the notifier holds it
+while any *non-mobile* device is syncing, cancels it if the room is read, replied to,
+or marked fully-read, and otherwise escalates it to the real push gateway
+(matrix.org sygnal, UnifiedPush distributor, ...) after `NOTIFIER_ESCALATE_AFTER`.
+It works by rewriting each managed mobile pusher's `data.url` to point at itself —
+transparent to the phone, no client reconfiguration, transport-agnostic (APNs, FCM,
+UnifiedPush all forward identically).
+
+Setup:
+
+1. Add `notifier` to `COMPOSE_PROFILES` in `.env` and re-run `./scripts/bootstrap.sh`
+   (it also enables MSC3881 in the Synapse config, exposing pusher device IDs).
+2. Mint a long-lived token per managed user — `./scripts/mas-admin-token.sh <user>` on
+   MAS deployments, or an Element *Settings → Help & About* token.
+3. Set `NOTIFIER_USERS` to comma-separated `mxid=token` pairs (tokens are long; keep
+   them out of anything git-tracked).
+4. `docker compose --profile notifier up -d --build`.
+
+Semantics:
+
+- **Hold** — a push for a managed mobile pusher is held while a non-mobile device
+  (not the phone, not the notifier's own device) has synced within `NOTIFIER_HOLD_WINDOW`.
+- **Cancel** — a read receipt, own message, or `m.fully_read` change in that room
+  (within `NOTIFIER_ACK_GRACE` of the push) silently drops the held push.
+- **Escalate** — after `NOTIFIER_ESCALATE_AFTER` seconds with no ack, the push is
+  forwarded to the original gateway (reason `timeout`); if the desktop stops syncing
+  first, it forwards immediately (reason `idle`).
+- **Immediate** — badge-only updates (no `event_id`), pushes for unmanaged devices,
+  and pushes while no desktop is active go straight through (fail-open).
+- A newer push for the same room replaces the held one (the phone gets the latest
+  message, not a queue).
+
+Finding device IDs (only needed if MSC3881 device IDs are unavailable — the service
+falls back to `NOTIFIER_MOBILE_DEVICE_IDS`): Element → Settings → Sessions, or
+`curl -H "Authorization: Bearer $TOKEN" .../_matrix/client/v3/devices`.
+
+Tuning (all in `.env`, all optional):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `NOTIFIER_ESCALATE_AFTER` | `300` | Seconds a push is held before the phone buzzes. |
+| `NOTIFIER_HOLD_WINDOW` | `120` | Max seconds since a desktop client last synced to still count as "active". |
+| `NOTIFIER_ACK_GRACE` | `60` | Grace window for a receipt/send slightly before the push arrival. |
+| `NOTIFIER_TICK` | `15` | How often pushers/devices are re-checked and held pushes evaluated. |
+| `NOTIFIER_MOBILE_APP_ID_PREFIXES` | `io.element.elementx,im.vector.app` | Which pusher `app_id`s count as mobile. |
+| `NOTIFIER_MOBILE_DEVICE_IDS` | *(empty)* | Manual mobile device-ID list (MSC3881 fallback). |
+| `NOTIFIER_HOMESERVER_URL` / `NOTIFIER_GATEWAY_URL` / `NOTIFIER_PORT` | see compose | Internal wiring; leave defaulted. |
+
+Limitations:
+
+- Desktop notifications stay client-local (unchanged Element behavior) — only the
+  phone channel is managed. Desktop open but you're away = the phone still buzzes
+  after the escalation timeout, which is the intended no-ack behavior.
+- Hold state lives in the `notifier_data` volume and survives restarts; a hard kill
+  mid-rewrite is recovered by the next tick, and
+  `docker compose --profile notifier exec notifier python notifier.py --restore`
+  reverts all pushers to their original gateways (the uninstall step).
+
 ## Deliberately deferred
 
 - **Bridges:** not included; the profile pattern makes them easy to add.

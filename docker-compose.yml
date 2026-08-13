@@ -228,6 +228,46 @@ services:
         limits:
           memory: 64M
 
+  # --- notifier profile (Discord-style active-device push) --------------------
+
+  # Holds phone pushes while a desktop client is active, escalates after a
+  # timeout. Rewrites managed mobile pushers' data.url to itself and forwards
+  # verbatim to the original gateway (matrix.org sygnal, ntfy, ...).
+  notifier:
+    <<: *restart
+    build: ./notifier
+    container_name: neo-notifier
+    profiles: [notifier]
+    environment:
+      NOTIFIER_USERS: ${NOTIFIER_USERS:-}
+      NOTIFIER_HOMESERVER_URL: ${NOTIFIER_HOMESERVER_URL:-http://synapse:8008}
+      NOTIFIER_GATEWAY_URL: ${NOTIFIER_GATEWAY_URL:-http://notifier:8080/_matrix/push/v1/notify}
+      NOTIFIER_ESCALATE_AFTER: ${NOTIFIER_ESCALATE_AFTER:-300}
+      NOTIFIER_HOLD_WINDOW: ${NOTIFIER_HOLD_WINDOW:-120}
+      NOTIFIER_ACK_GRACE: ${NOTIFIER_ACK_GRACE:-60}
+      NOTIFIER_TICK: ${NOTIFIER_TICK:-15}
+      NOTIFIER_PORT: ${NOTIFIER_PORT:-8080}
+      NOTIFIER_MOBILE_APP_ID_PREFIXES: ${NOTIFIER_MOBILE_APP_ID_PREFIXES:-io.element.elementx,im.vector.app}
+      NOTIFIER_MOBILE_DEVICE_IDS: ${NOTIFIER_MOBILE_DEVICE_IDS:-}
+    volumes:
+      - notifier_data:/data
+    # neo-internal reaches Synapse (rewrites, /sync, /devices); proxy gives
+    # egress to the upstream push gateways (matrix.org sygnal, ntfy, ...).
+    networks: [neo-internal, proxy]
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
+    depends_on: [synapse]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${NOTIFIER_PORT:-8080}/healthz', timeout=3)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
   # --- monitoring profile ---------------------------------------------------
 
   prometheus:
@@ -510,3 +550,4 @@ volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  notifier_data:

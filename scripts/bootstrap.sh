@@ -52,6 +52,14 @@ case ",${COMPOSE_PROFILES:-}," in *,workers,*) WORKERS_ON=true ;; esac
 STICKERS_ON=false
 case ",${COMPOSE_PROFILES:-}," in *,stickers,*) STICKERS_ON=true ;; esac
 
+# Notifier profile: active-device push manager. Purely a warning check — the
+# service itself no-ops gracefully when NOTIFIER_USERS is empty.
+NOTIFIER_ON=false
+case ",${COMPOSE_PROFILES:-}," in *,notifier,*) NOTIFIER_ON=true ;; esac
+if [[ "$NOTIFIER_ON" == true && -z "${NOTIFIER_USERS:-}" ]]; then
+  warn "notifier profile enabled but NOTIFIER_USERS is empty — push notifications are unmanaged."
+fi
+
 warn "NEO_SERVER_NAME is '${NEO_SERVER_NAME}'. This is permanent — it can never be changed once a user or room exists."
 
 # --- 3. Verify the external proxy network exists (NPM owns it) ----------------

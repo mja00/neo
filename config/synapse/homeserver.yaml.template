@@ -71,6 +71,39 @@ max_upload_size: "${SYNAPSE_MAX_UPLOAD_SIZE}"
 # URL previews fetch arbitrary URLs server-side (SSRF surface); off by default.
 url_preview_enabled: false
 
+# Synapse's default SSRF blocklist refuses outbound HTTP to private ranges,
+# which also blocks http pushers targeting the neo-notifier on Docker-internal
+# networks. Same defaults, with the two internal subnets carved out:
+#   neo-internal  192.168.16.0/20  (notifier .15)
+#   proxy (NPM)   172.21.0.0/16    (notifier .14)
+# If either subnet changes (docker network inspect), recompute the complement
+# CIDRs below so only those ranges are exempted.
+ip_range_blacklist:
+  - '127.0.0.0/8'
+  - '10.0.0.0/8'
+  - '172.16.0.0/14'
+  - '172.20.0.0/16'
+  - '172.22.0.0/15'
+  - '172.24.0.0/13'
+  - '192.168.0.0/20'
+  - '192.168.32.0/19'
+  - '192.168.64.0/18'
+  - '192.168.128.0/17'
+  - '100.64.0.0/10'
+  - '192.0.0.0/24'
+  - '169.254.0.0/16'
+  - '192.88.99.0/24'
+  - '198.18.0.0/15'
+  - '192.0.2.0/24'
+  - '198.51.100.0/24'
+  - '203.0.113.0/24'
+  - '224.0.0.0/4'
+  - '::1/128'
+  - 'fe80::/10'
+  - 'fc00::/7'
+  - '2001:db8::/32'
+  - 'ff00::/8'
+  - 'fec0::/10'
 report_stats: false
 suppress_key_server_warning: true
 # Multiple notaries so a big room's key-fetch burst (one lookup per resident
@@ -97,3 +130,7 @@ turn_uris:
 turn_shared_secret: "${COTURN_STATIC_AUTH_SECRET}"
 turn_user_lifetime: 86400000
 turn_allow_guests: false
+# MSC3881: expose pusher device_id + enabled state on GET /pushers. The
+# notification manager needs device ids to tell phones from desktops.
+experimental_features:
+  msc3881_enabled: true

@@ -1,0 +1,3 @@
+# Local test environment
+.venv/
+.pytest_cache/
