@@ -155,7 +155,8 @@ services:
 
   element:
     <<: *restart
-    image: vectorim/element-web:${ELEMENT_IMAGE_TAG}
+    # Fork build of element-web, published by the fork's "Docker GHCR" workflow.
+    image: ghcr.io/mja00/element-web:${ELEMENT_IMAGE_TAG}
     container_name: neo-element
     profiles: [element]
     volumes:
