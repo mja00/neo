@@ -192,9 +192,10 @@ NVMe RAID** — running a private instance for a few users:
 - **Postgres** (in `docker-compose.yml` `command`): `shared_buffers=2GB`,
   `effective_cache_size=8GB`, NVMe cost/concurrency (`random_page_cost=1.1`,
   `effective_io_concurrency=200`), and parallelism matched to 8 cores.
-- **Synapse** (`caches` in `homeserver.yaml`): `global_factor: 1.0`, and
-  **presence disabled** — in large rooms presence EDUs are a big federation-CPU
-  cost for little benefit. Set presence to `"untracked"`/`true` if you want it back.
+- **Synapse** (`caches` in `homeserver.yaml`): `global_factor: 1.0`, with
+  **presence enabled** so Element can show direct-message activity. Presence EDUs
+  add federation CPU in large rooms; set `presence.enabled` to `"untracked"` or
+  `false` in the template if that tradeoff is not worthwhile.
 - **Resource limits** per service (`deploy.resources.limits`): Synapse **12 GB**
   (big-room state resolution spikes hard — a low ceiling causes OOM kills),
   Postgres 4 GB, Prometheus 1 GB, Grafana 512 MB, the rest ≤256 MB. Guard rails, not

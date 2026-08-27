@@ -52,12 +52,11 @@ caches:
   expire_caches: true
   cache_entry_ttl: 30m
 
-# Presence off: for a small server in large rooms, processing/broadcasting
-# online-status EDUs for thousands of remote users is a big federation-CPU cost
-# for little benefit. Use "untracked" instead to keep clients able to show
-# presence without the server-side tracking overhead.
+# Presence is enabled so Element can publish local activity and receive status
+# updates for direct messages. Large federated rooms may pay extra federation
+# CPU for presence EDUs; set this to "untracked" or false to opt out if needed.
 presence:
-  enabled: false
+  enabled: true
 
 # The auth block (built-in registration vs. delegated MAS) is appended here by
 # scripts/bootstrap.sh from config/synapse/auth.{local,mas}.yaml.template,
