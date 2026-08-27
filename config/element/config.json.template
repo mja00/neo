@@ -5,9 +5,6 @@
       "server_name": "${NEO_SERVER_NAME}"
     }
   },
-  "enable_presence_by_hs_url": {
-    "https://${NEO_MATRIX_HOST}": true
-  },
   "brand": "Neo",
   "disable_guests": true,
   "disable_custom_urls": false,
