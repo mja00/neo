@@ -47,6 +47,7 @@ class MockSynapse:
         self.devices = []
         self.whoami = {"user_id": MXID, "device_id": "NOTIFIERDEV"}
         self.filters = []
+        self.sync_requests = []
         self.sync_q = asyncio.Queue()
 
     def build_app(self):
@@ -81,6 +82,7 @@ class MockSynapse:
         return web.json_response({"filter_id": "f-1"})
 
     async def handle_sync(self, request):
+        self.sync_requests.append(dict(request.query))
         return web.json_response(await self.sync_q.get())
 
 
@@ -190,6 +192,16 @@ async def test_hold_when_desktop_active(world):
     assert len(world.state.held) == 1
     assert world.state.held[0]["payload"] == payload
     assert world.up.calls == []
+
+
+async def test_notifier_sync_does_not_affect_presence(world):
+    world.mock.sync_q.put_nowait({"next_batch": "b1"})
+
+    await world.user.sync_once()
+
+    assert world.mock.sync_requests == [
+        {"timeout": "30000", "set_presence": "offline", "filter": "f-1"}
+    ]
 
 
 async def test_cancel_on_same_room_receipt_within_grace(world):

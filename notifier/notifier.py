@@ -287,7 +287,8 @@ class User:
     async def sync_once(self):
         if self.filter_id is None:
             await self.ensure_filter()
-        params = {"timeout": str(SYNC_TIMEOUT_MS)}
+        # The notifier must not make the user's account appear online.
+        params = {"timeout": str(SYNC_TIMEOUT_MS), "set_presence": "offline"}
         if self.filter_id:
             params["filter"] = self.filter_id
         if self.since:
