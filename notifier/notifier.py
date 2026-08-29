@@ -94,7 +94,7 @@ class Config:
         gateway_url="http://notifier:8080/_matrix/push/v1/notify",
         port=8080,
         escalate_after=300,
-        hold_window=120,
+        hold_window=180,
         ack_grace=60,
         tick=15,
         mobile_prefixes=("io.element.elementx", "im.vector.app"),
@@ -147,7 +147,7 @@ class Config:
             ),
             port=int_env("NOTIFIER_PORT", 8080),
             escalate_after=int_env("NOTIFIER_ESCALATE_AFTER", 300),
-            hold_window=int_env("NOTIFIER_HOLD_WINDOW", 120),
+            hold_window=int_env("NOTIFIER_HOLD_WINDOW", 180),
             ack_grace=int_env("NOTIFIER_ACK_GRACE", 60),
             tick=int_env("NOTIFIER_TICK", 15),
             mobile_prefixes=prefixes,
@@ -248,6 +248,8 @@ class User:
 
     def active_desktop(self) -> bool:
         """True if a non-mobile, non-self device synced within the hold window."""
+        # Synapse only rewrites last_seen_ts every 120s (LAST_SEEN_GRANULARITY), so
+        # the window must exceed 120s + tick or a busy desktop reads as idle.
         if self.fail_open:
             return False
         excluded = set(self.mobile_ids)
