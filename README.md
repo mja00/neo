@@ -342,7 +342,7 @@ Tuning (all in `.env`, all optional):
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `NOTIFIER_ESCALATE_AFTER` | `300` | Seconds a push is held before the phone buzzes. |
-| `NOTIFIER_HOLD_WINDOW` | `120` | Max seconds since a desktop client last synced to still count as "active". |
+| `NOTIFIER_HOLD_WINDOW` | `180` | Max seconds since a desktop client last synced to still count as "active". Must exceed Synapse's 120s `last_seen_ts` granularity plus the tick. |
 | `NOTIFIER_ACK_GRACE` | `60` | Grace window for a receipt/send slightly before the push arrival. |
 | `NOTIFIER_TICK` | `15` | How often pushers/devices are re-checked and held pushes evaluated. |
 | `NOTIFIER_MOBILE_APP_ID_PREFIXES` | `io.element.elementx,im.vector.app` | Which pusher `app_id`s count as mobile. |
